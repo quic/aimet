@@ -231,23 +231,6 @@ class ConnectedGraph(AimetCommonConnectedGraph):
             return self._module_to_op_dict.get(module, None)
         return None
 
-    def get_all_aten_nodes(self, module: torch.nn.Module,
-                           module_to_jit_trace: Dict[torch.nn.Module, torch.jit.TracedModule]) -> List[torch._C.Node]:
-        """
-        Given PyTorch module, Find all the valid aten nodes in forward pass for given trace of model or submodule.
-
-        :param module: PyTorch module.
-        :param module_to_jit_trace: Dictionary mapping torch modules to their traces
-        :return: List of trace graph nodes if node.kind() starts with "aten::".
-        """
-        try:
-            trace = module_to_jit_trace[module]
-        except:
-            raise KeyError(f"Couldn't find corresponding JIT trace for module : {module}")  # pylint: disable=raise-missing-from
-
-        nodes = self._find_aten_nodes_in_forward_pass(trace)
-        return nodes
-
     def _generate_module_lookup_table(self, model: torch.nn.Module):
         """
         Generates a look up dictionary for getting modules from their names.
@@ -514,7 +497,7 @@ class ConnectedGraph(AimetCommonConnectedGraph):
         # In the case of elementwise ops, we want to express the elementwise op as an Operation, however sometimes
         # it is necessary to parse the interior of the elementwise op's CallMethod to extract information about
         # constants being passed in, or the order in which operands are used.
-        if self._is_recursive_parsing_needed(subgraph_model, module_to_jit_trace) or \
+        if self._is_recursive_parsing_needed(subgraph_model, module_to_jit_trace[subgraph_model]) or \
                 self._is_multi_input_op_to_parse(subgraph_model):
             node_name_to_subgraph_model[getattr_node_info.node_alias] = (subgraph_model, getattr_node_info)
 
@@ -1244,7 +1227,7 @@ class ConnectedGraph(AimetCommonConnectedGraph):
             consumer_index += 1
 
     def _is_recursive_parsing_needed(self, module: torch.nn.Module,
-                                     module_to_jit_trace: Dict[torch.nn.Module, torch.jit.TracedModule]) -> bool:
+                                     trace: torch.jit.TracedModule) -> bool:
         """
         Utility to decide whether recursive parsing is needed for given module and it's jit trace.
         Recursive parsing is not needed
@@ -1252,12 +1235,12 @@ class ConnectedGraph(AimetCommonConnectedGraph):
         2) if the module is leaf module and has only one aten node inside forward method (aimet_modules.Add etc.)
 
         :param module: PyTorch module.
-        :param module_to_jit_trace: Dictionary mapping torch modules to their traces
+        :param trace: torch.jit trace of the module
         :return: Boolean whether recursive parsing needed or not. If needed returns True, False otherwise.
         """
         recursive_parsing_needed = True
         if is_torch_nn_leaf_module(module) or \
-                is_custom_leaf_module(module, self.get_all_aten_nodes(module, module_to_jit_trace)) or \
+                is_custom_leaf_module(module, self._find_aten_nodes_in_forward_pass(trace)) or \
                 isinstance(module, tuple(aimet_torch.utils.modules_to_treat_as_leaf)):
             recursive_parsing_needed = False
 
@@ -1274,8 +1257,8 @@ class ConnectedGraph(AimetCommonConnectedGraph):
 
         return isinstance(module, tuple(MULTI_INPUT_OPS_TO_PARSE))
 
-    @staticmethod
-    def _generate_trace_lookup_table(model: torch.nn.Module,
+    def _generate_trace_lookup_table(self,
+                                     model: torch.nn.Module,
                                      trace: Union[torch.jit.TopLevelTracedModule, torch.jit.TracedModule]):
         """
         Generate pytorch module names to corresponding JIT trace dictionary. There will be always one to one
@@ -1303,6 +1286,19 @@ class ConnectedGraph(AimetCommonConnectedGraph):
         module_to_jit_trace = {model: trace}
         # Recursively add children modules and corresponding JIT traces.
         _add_jit_trace(model, trace)
+
+        missing_modules = self._module_to_name.keys() - module_to_jit_trace.keys()
+
+        for m in module_to_jit_trace:
+            if is_leaf_module(m):
+                missing_modules -= set(m.modules())
+
+        if missing_modules:
+            missing_modules = ', '.join([
+                self._module_to_name[module] for module in missing_modules
+            ])
+            raise RuntimeError(f"Couldn't find corresponding JIT trace for modules: {missing_modules}")
+
         return module_to_jit_trace
 
     @staticmethod
