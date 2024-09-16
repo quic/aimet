@@ -155,15 +155,14 @@ def visualize_advanced_stats(sim: QuantizationSimModel, dummy_input, save_path: 
     .. note::
 
         For plotting advanced stats, the quantizer encoding analyzers should have observers of type
-        :class:`_HistogramObserver`, that is :attr:`QuantScheme.post_training_tf_enhanced` and
-        :attr:`QuantScheme.training_range_learning_with_tf_enhanced quant schemes. If observers are of the type
+        :class:`_HistogramObserver`. If observers are of the type
         :class:`_MinMaxObserver`, then advanced stats cannot be extracted and only the min and max values are
         shown in the boxplots.
 
     .. note::
 
-        In case of Per-channel or Blockwise quantization, for the param quantizers that are quantized this way,
-        advanced stats are not extracted due to the presence of multiple histograms. For these
+        In case of Per-channel or Blockwise quantizers,
+        percentiles are not extracted due to the presence of multiple histograms. For these
         quantizers, only min and max values are shown in the boxplots.
 
     Creates an interactive visualization of min and max activations/weights of all quantized modules in the input
@@ -173,7 +172,7 @@ def visualize_advanced_stats(sim: QuantizationSimModel, dummy_input, save_path: 
         - Table containing names and ranges for layers exceeding threshold values
         - Select different views of the table to group layers exceeding threshold values
         - Filter layers listed in the table by name
-        - Select one or more layers from the table for advanced analysis
+        - Select one or more layers from the table for viewing their boxplots and highlighting them in the main plot
 
     Saves the visualization as a .html at the given path.
 
