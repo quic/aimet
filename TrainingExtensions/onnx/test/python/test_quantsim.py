@@ -49,11 +49,12 @@ import pytest
 from aimet_common import libquant_info
 from aimet_common.defs import QuantScheme, QuantizationDataType
 from aimet_common.quantsim_config.utils import get_path_for_per_channel_config
-from aimet_onnx.quantsim import QuantizationSimModel, load_encodings_to_sim
+from aimet_onnx.quantsim import QuantizationSimModel, load_encodings_to_sim, set_blockwise_quantization_for_weights
 from aimet_onnx.qc_quantize_op import OpMode
 from aimet_onnx.utils import make_dummy_input
+from aimet_onnx import utils
 from models.models_for_tests import SingleResidual
-from models import models_for_tests
+from models import models_for_tests, test_models
 from models.models_for_tests import build_dummy_model, single_residual_model, BNAfterConv, multi_input_with_constant_model , multi_output_model, custom_add_model, build_lstm_gru_dummy_model, \
     transposed_conv_model, depthwise_transposed_conv_model, linear_split_into_matmul_add
 
@@ -416,7 +417,7 @@ class TestQuantSim:
             for param_name in sim.param_names:
                 qc_op = sim.qc_quantize_op_dict[param_name]
                 if qc_op.quant_info.usePerChannelMode and qc_op.enabled:
-                    num_channels = qc_op.tensor_quantizer_params.num_output_channels
+                    num_channels = qc_op.tensor_quantizer_params.tensor_shape[qc_op.tensor_quantizer_params.channel_axis]
                     assert num_channels == len(qc_op.encodings)
                     assert num_channels == len(encoding_data['param_encodings'][param_name])
                     for encoding in qc_op.encodings:
@@ -967,3 +968,127 @@ class TestQuantSim:
         assert quantizer_1.bitwidth == 16
         assert quantizer_1.use_symmetric_encodings
         assert len(quantizer_1.encodings) == 1
+
+    @pytest.mark.parametrize("model", (models_for_tests.pointwise_conv1d((1, 64, 32)),
+                                       models_for_tests.conv_model((64, 64, 3, 3), (1, 64, 32, 32), (1, 64, 32, 32), transpose=False),
+                                       models_for_tests.pointwise_conv3d((1, 64, 32, 32, 4))))
+    def test_blockwise_quantization_conv(self, model):
+        block_size = 16
+        sim = QuantizationSimModel(model, simplify_model=False)
+        set_blockwise_quantization_for_weights(sim, "Conv", 4, True, block_size=block_size, strict=True)
+        dummy_input = make_dummy_input(model)
+
+        sim.compute_encodings(lambda session, _: session.run(None, dummy_input), None)
+
+        weight_quantizer = sim.get_qc_quantize_op()["weight"]
+        assert weight_quantizer.quant_info.blockSize == block_size
+        assert weight_quantizer.quant_info.usePerChannelMode
+        assert weight_quantizer.quant_info.blockAxis == 1
+        assert len(weight_quantizer.encodings) == 64 * 64 / block_size
+
+    @pytest.mark.parametrize("model", (models_for_tests.pointwise_convtranspose1d((1, 64, 32)),
+                                       models_for_tests.conv_model((64, 64, 3, 3), (1, 64, 32, 32), (1, 64, 32, 32), transpose=True),
+                                       models_for_tests.pointwise_convtranspose3d((1, 64, 32, 32, 4))))
+    def test_blockwise_quantization_convtranspose(self, model):
+        block_size = 16
+        sim = QuantizationSimModel(model, simplify_model=False)
+        set_blockwise_quantization_for_weights(sim, "ConvTranspose", 4, True, block_size=block_size, strict=True)
+        dummy_input = make_dummy_input(model)
+
+        sim.compute_encodings(lambda session, _: session.run(None, dummy_input), None)
+
+        weight_quantizer = sim.get_qc_quantize_op()["weight"]
+        assert weight_quantizer.quant_info.blockSize == block_size
+        assert weight_quantizer.quant_info.usePerChannelMode
+        assert weight_quantizer.quant_info.blockAxis == 0
+        assert len(weight_quantizer.encodings) == 64 * 64 / block_size
+
+    @pytest.mark.parametrize("model", (models_for_tests.weight_gemm_model(in_features=16, out_features=32, transposed_weight=False),
+                                       models_for_tests.weight_gemm_model(in_features=16, out_features=32, transposed_weight=True),
+                                       models_for_tests.weight_matmul_model(in_features=16, out_features=32)))
+    def test_blockwise_quantization_matmul(self, model):
+        block_size = 4
+        input_features = model.graph.input[0].type.tensor_type.shape.dim[-1].dim_value
+        output_features = model.graph.output[0].type.tensor_type.shape.dim[-1].dim_value
+        transposed_weight = model.graph.initializer[0].dims[0] == output_features
+        sim = QuantizationSimModel(model, simplify_model=False)
+        set_blockwise_quantization_for_weights(sim, ("MatMul", "Gemm"), 4, True, block_size=block_size, strict=True)
+        dummy_input = make_dummy_input(model)
+
+        sim.compute_encodings(lambda session, _: session.run(None, dummy_input), None)
+
+        weight_quantizer = sim.get_qc_quantize_op()["weight"]
+        assert len(weight_quantizer.encodings) == output_features * input_features / block_size
+        assert weight_quantizer.quant_info.usePerChannelMode
+        assert weight_quantizer.quant_info.channelAxis == (0 if transposed_weight else 1)
+        assert weight_quantizer.quant_info.blockAxis == (1 if transposed_weight else 0)
+        assert weight_quantizer.quant_info.blockSize == block_size
+        sim.session.run(None, dummy_input)
+
+    def test_blockwise_quantization_with_dynamic_matmul(self):
+        block_size = 2
+        model = models_for_tests.dynamic_matmul_model(batch_size=1)
+        sim = QuantizationSimModel(model, simplify_model=False)
+        set_blockwise_quantization_for_weights(sim, ("MatMul", "Gemm"), 4, True, block_size=block_size)
+
+        assert sim.qc_quantize_op_dict["linear.weight"].quant_info.blockSize == 2
+
+        for name, quantizer in sim.qc_quantize_op_dict.items():
+            if name != "linear.weight":
+                # Blockwise quantization should only be enabled for the linear layer
+                assert quantizer.quant_info.blockSize == 0
+
+    def test_blockwise_quantization_nonstrict(self):
+        model = models_for_tests.weight_matmul_model(in_features=16, out_features=32)
+        sim = QuantizationSimModel(model)
+        with pytest.raises(ValueError):
+            set_blockwise_quantization_for_weights(sim, ("MatMul", "Gemm"), 4, True, block_size=7, strict=True)
+
+        set_blockwise_quantization_for_weights(sim, ("MatMul", "Gemm"), 4, True, block_size=7, strict=False)
+
+        weight_quantizer = sim.get_qc_quantize_op()["weight"]
+        assert weight_quantizer.quant_info.blockSize == 0
+        sim.session.run(None, make_dummy_input(model))
+
+
+    @pytest.mark.parametrize("model, block_size", ((models_for_tests.single_residual_model(), 4),
+                                                   (test_models.linear_layer_model(), 64)))
+    def test_blockwise_quantization(self, model, block_size, tmpdir):
+        dummy_input = make_dummy_input(model.model)
+        bq_layers = ("MatMul", "Conv", "Gemm")
+        bq_weights = set()
+
+        for node in model.graph().node:
+            if node.op_type in bq_layers:
+                bq_weights.add(node.input[1])
+
+        # Input shape is not compatible with block size
+        bq_weights.remove(model.graph().node[0].input[1])
+
+        sim = QuantizationSimModel(model, dummy_input)
+        set_blockwise_quantization_for_weights(sim, ("MatMul", "Conv", "Gemm"), 8, True, block_size, strict=False)
+        sim.compute_encodings(lambda session, _: session.run(None, dummy_input), None)
+
+        for name, quantizer in sim.qc_quantize_op_dict.items():
+            if name in bq_weights:
+                assert quantizer.quant_info.usePerChannelMode
+                assert quantizer.quant_info.blockSize == block_size
+                assert len(quantizer.encodings) > 1
+            else:
+                assert quantizer.quant_info.blockSize == 0
+                assert len(quantizer.encodings) == 1
+
+        sim.export(tmpdir, "tmp_model")
+        with open(os.path.join(tmpdir, "tmp_model.encodings")) as f:
+            encodings = json.load(f)
+
+        for key, enc in encodings["param_encodings"].items():
+            if key not in bq_weights:
+                assert len(enc) == 1
+                continue
+            for param in sim.model.graph().initializer:
+                if param.name == key and key in bq_weights:
+                    assert len(enc) == param.dims[0] * param.dims[1] / block_size
+
+        for key, enc in encodings["activation_encodings"].items():
+            assert len(enc) == 1
