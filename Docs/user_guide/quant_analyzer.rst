@@ -8,7 +8,7 @@ AIMET QuantAnalyzer
 Overview
 ========
 
-The QuantAnalyzer performs several analyses to identify sensitive areas and hotspots in the model. These analyses are performed automatically. To use QuantAnalyzier, you to pass in callbacks to perform forward pass and evaluation, and optionally a dataloader for MSE loss analysis.
+The QuantAnalyzer performs several analyses to identify sensitive areas and hotspots in the model. These analyses are performed automatically. To use QuantAnalyzier, you pass in callbacks to perform forward passes and evaluations, and optionally a dataloader for MSE loss analysis.
 
 For each analysis, QuantAnalyzer outputs JSON and/or HTML files containing data and plots for visualization.
 
@@ -20,12 +20,12 @@ To call the QuantAnalyzer API, you must provide the following:
     - A dummy input for the model that can contain random values but which must match the shape of the model's expected input
     - A user-defined function for passing 500-1000 representative data samples through the model for quantization calibration
     - A user-defined function for passing labeled data through the model for evaluation, returning an accuracy metric
-    - (Optional, for runing MSE loss analysis) A dataloader providing unlabeled data to be passed through the model
+    - (Optional, for running MSE loss analysis) A dataloader providing unlabeled data to be passed through the model
 
 Other quantization-related settings are also provided in the call to analyze a model.
 See :doc:`PyTorch QuantAnalyzer API Docs<../api_docs/torch_quant_analyzer>` for more about how to call the QuantAnalyzer feature.
 
-..admonition:: NOTE
+.. admonition:: NOTE
    Typically on quantized runtimes, batch normalization (BN) layers are folded where possible. So that you don't have to call a separate API to do so, QuantAnalyzer automatically performs Batch Norm Folding before running its analyses.
 
 Detailed analysis descriptions
@@ -34,7 +34,7 @@ Detailed analysis descriptions
 QuantAnalyzer performs the following analyses:
 
 Sensitivity analysis to weight and activation quantization
-    QuantAnalyzer compares the accuracies of the original FP32 model, an activation-only quantized model, and a weight-only quantized model. This helps users determine which AIMET quantization technique(s) will be more beneficial for the model.
+    QuantAnalyzer compares the accuracies of the original FP32 model, an activation-only quantized model, and a weight-only quantized model. This helps determine which AIMET quantization technique(s) will be more beneficial for the model.
 
     For example, in situations where the model is more sensitive to activation quantization, PTQ techniques like Adaptive Rounding or Cross Layer Equalization might not be very helpful.
 

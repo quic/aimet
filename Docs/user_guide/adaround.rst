@@ -7,7 +7,7 @@ AIMET AdaRound
 
 By default, AIMET uses *nearest rounding* for quantization. A single weight value in a weight tensor is illustrated in the following figure. In nearest rounding, this weight value is quantized to the nearest integer value.
 
-The Adaptive Rounding (AdaRound) feature uses a smaller subset of the unlabeled training data to adaptively round weights. In the following figure, the weight value is quantized to the integer value far from it.
+The Adaptive Rounding (AdaRound) feature uses a subset of the unlabeled training data to adaptively round weights. In the following figure, the weight value is quantized to the integer value far from it.
 
 .. image:: ../images/adaround.png
     :width: 900px
@@ -40,6 +40,8 @@ QAT
 Recommended
 -----------
 
+The following sequences are recommended:
+
  #. {BNF} --> {CLE} --> AdaRound
        Applying BNF and CLE are optional steps before applying AdaRound. Some models benefit from applying CLE while some don't.
 
@@ -49,7 +51,7 @@ Recommended
 Not recommended
 ----------------
 
-Applying BC either before or after AdaRound is not recommended.
+Applying bias correction (BC) either before or after AdaRound is *not* recommended.
 
  #. AdaRound --> BC
 
@@ -70,7 +72,7 @@ Use the following guideline for adjusting hyper parameters with AdaRound.
     * Regularization parameter (default 0.01)
 
 * Hyper Parameters to avoid changing
-    * Beta range(default (20, 2))
+    * Beta range (default (20, 2))
     * Warm start period (default 20%)
 
 AdaRound API

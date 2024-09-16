@@ -6,9 +6,9 @@
 AIMET model quantization
 ########################
 
-Models are trained on floating-point hardware like CPUs and GPUs. However, when you run these models on quantized hardware with fixed-precision operations, the model parameters must be fixed-precision. For example, when running on hardware that supports 8-bit integer operations, the floating point parameters in the trained model need to be converted to 8-bit integers. For some models, reduction to 8-bit fixed-precision introduces noise that causes a loss of accuracy.
+Models are trained on floating-point hardware like CPUs and GPUs. However, when you run these models on quantized hardware with fixed-precision operations, the model parameters must be fixed-precision. For example, when running on hardware that supports 8-bit integer operations, the floating point parameters in the trained model need to be converted to 8-bit integers. 
 
-AIMET provides techniques and tools to help create quantized models that minimize loss of accuracy relative to floating-point models.
+For some models, reduction to 8-bit fixed-precision introduces noise that causes a loss of accuracy. AIMET provides techniques and tools to create quantized models that minimize this loss of accuracy.
 
 Use cases
 =========
@@ -43,6 +43,8 @@ Quantization-aware training (QAT) and fine-tuning
     A typical QAT workflow is illustrated here:
 
     .. image:: ../images/quant_use_case_2.PNG
+
+_aimet-quantization-features:
 
 AIMET quantization features
 ===========================
@@ -88,7 +90,7 @@ Post-training quantization techniques help improve quantized model accuracy with
     AutoQuant <auto_quant>
     Adaptive Rounding (AdaRound) <adaround>
     BN Re-estimation<bn_reestimation>
-    Bias Correction [Deprecated] <post_training_quant_techniques>
+    Bias Correction [Deprecated]
 
 :ref:`AutoQuant<ug-auto-quant>`
     AIMET provides an API that integrates the post-training quantization techniques described below. AutoQuant is recommended for PTQ. If desired, individual techniques can be invoked using standalone feature specific APIs.
@@ -161,7 +163,7 @@ Before attempting quantization, ensure that models are defined according to mode
 2. Apply PTQ and AutoQuant
 --------------------------
 
-Apply PTQ techniques to adjust model parameters and make the model more robust to quantization. We recommend trying AutoQuant first. AutoQuant tries various other PTQ methods and finds the best combination of methods to apply. See :ref:`AIMET quantization features`.
+Apply PTQ techniques to adjust model parameters and make the model more robust to quantization. We recommend trying AutoQuant first. AutoQuant tries various other PTQ methods and finds the best combination of methods to apply. See :ref:`aimet-quantization-features`.
 
 
 3. Use QAT
@@ -185,9 +187,10 @@ AIMET QuantSim can export both items. The exported model type differs based on t
 - `.h5` and `.pb` for Keras
 
 The exact steps to export the model and encodings file depend on which AIMET Quantization features are used: 
+
 - Calling AutoQuant automatically exports the model and encodings file. 
 - If you use QAT, you'll call `.export()` on the QuantSim object. 
-- - If you use lower-level PTQ techniques like CLE, you first create a QuantSim object from the modified model, then call `.export()` on the QuantSim object.
+- If you use lower-level PTQ techniques like CLE, you first create a QuantSim object from the modified model, then call `.export()` on the QuantSim object.
 
 Debugging
 =========
@@ -198,4 +201,4 @@ Debugging
 
    Quantization Diagnostics <quantization_feature_guidebook>
 
-Applying AIMET Quantization features may involve some trial and error in order to find the best optimizations to apply on a particular model. If quantization accuracy does not seem to improve. see the debugging steps in the :ref:`Quantization Guidebook<ug-quant-debug>`. 
+Applying AIMET Quantization features may involve some trial and error in order to find the best optimizations to apply on a particular model. If quantization accuracy does not seem to improve, see the debugging steps in the :ref:`Quantization Diagnostics<ug-quant-debug>`. 

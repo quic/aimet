@@ -23,7 +23,7 @@ QuantSim workflow
 
 Following is a typical workflow for using AIMET QuantSim to simulate on-target quantized accuracy.
 
-1. Start with a pretrained floating-point FP32 model.
+1. Start with a pretrained floating-point (FP32) model.
 
 2. Use AIMET to create a simulation model. AIMET inserts quantization simulation operations into the model graph (explained in the sub-section below).
 
@@ -65,7 +65,7 @@ Min (q\ :sub:`min`\ )
 Max (q\ :sub:`max`\ )
    Numbers above these are clamped
 Delta 
-   Granularity of the fixed point numbers (a function of the bit-width selected)
+   Granularity of the fixed point numbers (a function of the selected bit-width)
 Offset
    Offset from zero
 
@@ -79,10 +79,16 @@ Quantization schemes
 
 AIMET supports various techniques, also called quantization schemes, for calculating min and max values for encodings:
 
-Min-Max (also referred to as "TF" in AIMET. The name TF represents the origin of the technique and has no relation to which framework is using it.)
+**Min-Max (also referred to as "TF" in AIMET)**
+
+   (The name "TF" derives from the origin of the technique and has no relation to which framework is using it.)
+
    To cover the whole dynamic range of the tensor, the quantization parameters Min and Max are defined as the observed Min and Max during the calibration process. This approach eliminates clipping error but is sensitive to outliers since extreme values induce rounding errors.
 
-Signal-to-Quantization-Noise (SQNR; also called “TF Enhanced” in AIMET. The name TF represents the origin of the technique and has no relation to what framework is using it).
+**Signal-to-Quantization-Noise (SQNR; also called “TF Enhanced” in AIMET)**
+
+   (The name "TF Enhanced" derives from the origin of the technique and has no relation to which framework is using it.)
+
    The SQNR approach is similar to the mean square error (MSE) minimization approach. The qmin and qmax are found that minimize the total MSE between the original and the quantized tensor. 
    
    Quantization noise and saturation noise are different types of erros which are weighted differently.
