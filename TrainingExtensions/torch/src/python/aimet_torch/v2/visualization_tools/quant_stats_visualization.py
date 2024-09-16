@@ -324,9 +324,6 @@ class DataSources:
 
         self.table_data_source = ColumnDataSource(
             data=dict(idx=[], namelist=[], minlist=[], maxlist=[]))
-        for key in stats_dict.keys():
-            if key not in ["idx", "name", 0, 100]:
-                self.table_data_source.add(data=[], name=str(key) + "%ilelist")
 
         self.selected_data_source = ColumnDataSource(
             data=dict(idx=[], namelist=[], floor=[], ceil=[], minlist=[], maxlist=[])
