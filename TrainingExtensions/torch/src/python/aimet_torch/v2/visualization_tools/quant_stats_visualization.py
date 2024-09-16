@@ -156,7 +156,15 @@ def visualize_advanced_stats(sim: QuantizationSimModel, dummy_input, save_path: 
 
         For plotting advanced stats, the quantizer encoding analyzers should have observers of type
         :class:`_HistogramObserver`, that is :attr:`QuantScheme.post_training_tf_enhanced` and
-        :attr:`QuantScheme.training_range_learning_with_tf_enhanced quant schemes.
+        :attr:`QuantScheme.training_range_learning_with_tf_enhanced quant schemes. If observers are of the type
+        :class:`_MinMaxObserver`, then advanced stats cannot be extracted and only the min and max values are
+        shown in the boxplots.
+
+    .. note::
+
+        In case of Per-channel or Blockwise quantization, for the param quantizers that are quantized this way,
+        advanced stats are not extracted due to the presence of multiple histograms. For these
+        quantizers, only min and max values are shown in the boxplots.
 
     Creates an interactive visualization of min and max activations/weights of all quantized modules in the input
     QuantSim object. The features include:
@@ -498,13 +506,13 @@ class QuantStatsVisualizer:
     plot_dims = {"plot_width": 700,
                  "plot_height": 400,
                  "table_width": 800,
-                 "boxplot_width": 700,
+                 "boxplot_unit_width": 150,
                  "boxplot_height": 400,
                  "whisker_head": 20,
                  "boxplot_vbar_width": 0.7,
                  "boxplot_text_font_size": "10px"}
     initial_vals = {"default_ymin": -1e5, "default_ymax": 1e5}
-    spacer_dims = {"sp1_width": 50, "sp1_height": 40}
+    spacer_dims = {"sp1_width": 50, "sp1_height": 40, "sp2_width": 100}
     table_column_widths = {"Layer Index": 100,
                            "Layer Name": 400,
                            "Min Activation": 100,
@@ -637,6 +645,7 @@ class QuantStatsVisualizer:
     def _define_callbacks(self, datasources, tableobjects, inputwidgets, mode):
         customcallbacks = CustomCallbacks()
 
+        table_columns = ["idx", "namelist", "minlist", "maxlist"]
         selection_columns = []
 
         if mode == "basic":
@@ -663,6 +672,7 @@ class QuantStatsVisualizer:
             max_thresh_filter=tableobjects.filters.max_thresh_filter,
             name_filter=tableobjects.filters.name_filter,
             select=inputwidgets.table_view_select,
+            table_columns=table_columns,
         ), code=(Path(__file__).parent / "quant_stats_visualization_JS_code/utils.js").read_text("utf8") + (Path(__file__).parent / "quant_stats_visualization_JS_code/limit_change_callback.js").read_text("utf8"))
 
         customcallbacks.reset_callback = CustomJS(args=dict(
@@ -685,7 +695,9 @@ class QuantStatsVisualizer:
             max_thresh_filter=tableobjects.filters.max_thresh_filter,
             name_filter=tableobjects.filters.name_filter,
             selection_columns=selection_columns,
+            table_columns=table_columns,
             mode=mode,
+            boxplot_unit_width=QuantStatsVisualizer.plot_dims["boxplot_unit_width"],
         ), code=(Path(__file__).parent / "quant_stats_visualization_JS_code/utils.js").read_text("utf8") + (Path(__file__).parent / "quant_stats_visualization_JS_code/reset_callback.js").read_text("utf8"))
 
         customcallbacks.name_filter_callback = CustomJS(args=dict(
@@ -696,6 +708,7 @@ class QuantStatsVisualizer:
             max_thresh_filter=tableobjects.filters.max_thresh_filter,
             name_filter=tableobjects.filters.name_filter,
             select=inputwidgets.table_view_select,
+            table_columns=table_columns,
         ), code=(Path(__file__).parent / "quant_stats_visualization_JS_code/utils.js").read_text("utf8") + (Path(__file__).parent / "quant_stats_visualization_JS_code/name_filter_callback.js").read_text("utf8"))
 
         customcallbacks.select_table_view_callback = CustomJS(args=dict(
@@ -705,7 +718,8 @@ class QuantStatsVisualizer:
             min_thresh_filter=tableobjects.filters.min_thresh_filter,
             max_thresh_filter=tableobjects.filters.max_thresh_filter,
             name_filter=tableobjects.filters.name_filter,
-            table=tableobjects.data_table
+            table=tableobjects.data_table,
+            table_columns=table_columns,
         ), code=(Path(__file__).parent / "quant_stats_visualization_JS_code/utils.js").read_text("utf8") + (Path(__file__).parent / "quant_stats_visualization_JS_code/select_table_view_callback.js").read_text("utf8"))
 
         customcallbacks.table_selection_callback = CustomJS(args=dict(
@@ -716,6 +730,7 @@ class QuantStatsVisualizer:
             boxplot=self.boxplot,
             selection_columns=selection_columns,
             mode=mode,
+            boxplot_unit_width=QuantStatsVisualizer.plot_dims["boxplot_unit_width"],
         ), code=(Path(__file__).parent / "quant_stats_visualization_JS_code/utils.js").read_text("utf8") + (Path(__file__).parent / "quant_stats_visualization_JS_code/table_selection_callback.js").read_text("utf8"))
 
         return customcallbacks
@@ -744,7 +759,9 @@ class QuantStatsVisualizer:
                             column(heading_2, row(inputwidgets.table_view_select, inputwidgets.name_input),
                                    tableobjects.data_table))
         elif mode == "advanced":
-            layout = column(heading_1, inputs1, sp1, row(self.plot, self.boxplot),
+            sp2 = Spacer(width=QuantStatsVisualizer.spacer_dims["sp2_width"],
+                         height=QuantStatsVisualizer.plot_dims["boxplot_height"])
+            layout = column(heading_1, inputs1, sp1, row(self.plot, sp2, self.boxplot),
                             column(heading_2, row(inputwidgets.table_view_select, inputwidgets.name_input),
                                    tableobjects.data_table))
         else:
@@ -792,7 +809,7 @@ class QuantStatsVisualizer:
         selections = self._add_plot_lines(datasources)
 
         if mode == "advanced":
-            self.boxplot.width = QuantStatsVisualizer.plot_dims["boxplot_width"]
+            self.boxplot.width = 5 * QuantStatsVisualizer.plot_dims["boxplot_unit_width"]
             self.boxplot.height = QuantStatsVisualizer.plot_dims["boxplot_height"]
             self.boxplot.y_range = Range1d()
             self._add_boxplots(datasources)

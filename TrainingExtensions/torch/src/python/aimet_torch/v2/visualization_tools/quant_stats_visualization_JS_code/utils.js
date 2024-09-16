@@ -80,3 +80,21 @@ function arrayMax(arr) {
     })
     return max;
 }
+
+function process_table_view(view, name_filter, min_thresh_filter, max_thresh_filter) {
+    let table_booleans;
+
+    if (view == "All") {
+        table_booleans = name_filter.booleans;
+    } else if (view == "Min") {
+        table_booleans = booleanAnd(name_filter.booleans, min_thresh_filter.booleans);
+    } else if (view == "Max") {
+        table_booleans = booleanAnd(name_filter.booleans, max_thresh_filter.booleans);
+    } else if (view == "Min | Max") {
+        table_booleans = booleanAnd(name_filter.booleans, booleanOr(min_thresh_filter.booleans, max_thresh_filter.booleans));
+    } else if (view == "Min & Max") {
+        table_booleans = booleanAnd(name_filter.booleans, booleanAnd(min_thresh_filter.booleans, max_thresh_filter.booleans));
+    }
+
+    return table_booleans
+}

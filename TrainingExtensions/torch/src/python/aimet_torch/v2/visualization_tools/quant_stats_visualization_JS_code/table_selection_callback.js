@@ -72,6 +72,12 @@ if (mode=="advanced") {
     let box_abs = arrayMax([box_max, -box_min, whisker_max, -whisker_min]);
     boxplot.y_range.start = -box_abs;
     boxplot.y_range.end = box_abs;
+    if (selected_data_source.data['idx'].length > 5) {
+        boxplot.width = boxplot_unit_width * selected_data_source.data['idx'].length;
+    }
+    else {
+        boxplot.width = boxplot_unit_width * 5;
+    }
 }
 
 selected_data_source.change.emit();
