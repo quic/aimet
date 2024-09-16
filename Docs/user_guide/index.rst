@@ -14,13 +14,13 @@ Quantization is a must for efficient edge inference using fixed-point AI acceler
 
 AIMET optimizes pre-trained models (for example, FP32 trained models) using post-training and fine-tuning techniques that minimize accuracy loss incurred during quantization or compression.
 
-AIMET currently supports PyTorch, TensorFlow, and Keras models.
+AIMET supports PyTorch, TensorFlow, and Keras models.
 
-The following picture shows a high-level view of the AIMET workflow. 
+The following diagram shows a high-level view of the AIMET workflow. 
 
 .. image:: ../images/AIMET_index_no_fine_tune.png
 
-You train a model in the PyTorch, TensorFlow, or Keras training framework, then pass the model to AIMET, using APIs for compression and quantization. AIMET returns a compressed and/or quantized version of the model that you can fine-tune (or train further for a small number of epochs) to recover lost accuracy. You can then export the model using ONNX, meta/checkpoint, or h5 to an on-target runtime like the Qualcomm\ |reg| Neural Processing SDK.
+You train a model in the PyTorch, TensorFlow, or Keras training framework, then pass the model to AIMET, using its APIs for compression and quantization. AIMET returns a compressed and/or quantized version of the model that you can fine-tune (or train further for a small number of epochs) to recover lost accuracy. You can then export the model using ONNX, meta/checkpoint, or h5 to an on-target runtime like the Qualcomm\ |reg| Neural Processing SDK.
 
 Features
 ========
@@ -33,21 +33,16 @@ Model Quantization
 Model Compression
   AIMET supports multiple model compression techniques that remove redundancies from a trained model, resulting in a smaller model that runs faster on target.
 
-Installing AIMET
+More Information
 ================
 
-For installation instructions, see :ref:`AIMET Installation <ug-installation>`.
+For more information about AIMET, see the following documentation:
 
-Getting Started
-===============
-
-To get started using AIMET, refer to the following documentation:
-
+- :ref:`Installation <ug-installation>`
 - :ref:`Quantization User Guide <ug-model-quantization>`
 - :ref:`Compression User Guide <ug-model-compression>`
-- :ref:`API Documentation <ug-apidocs>`
 - :ref:`Examples Documentation <ug-examples>`
-- :ref:`Installation <ug-installation>`
+- :ref:`API Documentation <ug-apidocs>`
 
 Release Information
 ===================
@@ -59,11 +54,12 @@ For information specific to this release, see :ref:`Release Notes <ug-release-no
 .. toctree::
   :hidden:
 
+   Installation <../install/index>
    Quantization User Guide <model_quantization>
    Compression User Guide <model_compression>
    API Documentation<../api_docs/index>
    Examples Documentation <examples>
-   Installation <../install/index>
+
 
 | |project| is a product of |author|
 | Qualcomm\ |reg| Neural Processing SDK is a product of Qualcomm Technologies, Inc. and/or its subsidiaries.

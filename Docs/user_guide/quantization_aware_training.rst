@@ -1,7 +1,7 @@
 .. _ug-quantization-aware-training:
 
 #################################
-AIMET Quantization Aware Training
+AIMET quantization aware training
 #################################
 
 Overview
@@ -27,7 +27,7 @@ Compared to QuantSim inference, step 3 is the only addition when performing QAT.
 QAT modes
 =========
 
-There are two versions of QAT: without Range Learning and with Range Learning.
+There are two versions of QAT: without range learning and with range learning.
 
 Without range learning
   In QAT without Range Learning, encoding values for activation quantizers are found once during calibration and are not updated again.
@@ -41,9 +41,10 @@ Recommendations for quantization-aware training
 ===============================================
 Here are some guidelines that can improve performance and speed convergence with QAT:
 
-* Initialization
-  It often helps to first apply post training quantization techniques like :ref:`AutoQuant<ug-auto-quant>` before applying QAT, especially if there is large drop in INT8 performance from the FP32 baseline.
-* Hyper-parameters:
+Initialization
+  - It often helps to first apply post training quantization techniques like :ref:`AutoQuant<ug-auto-quant>` before applying QAT, especially if there is large drop in INT8 performance from the FP32 baseline.
+
+Hyper-parameters
     - Number of epochs: 15-20 epochs are usually sufficient for convergence
     - Learning rate: Comparable (or one order higher) to FP32 model's final learning rate at convergence.
       Results in AIMET are with learning of the order 1e-6.
