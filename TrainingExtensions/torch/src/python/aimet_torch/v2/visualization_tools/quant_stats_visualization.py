@@ -39,6 +39,7 @@
 
 
 import os
+from pathlib import Path
 import torch
 from bokeh.events import DocumentReady, Reset
 from bokeh.layouts import row, column
@@ -50,20 +51,67 @@ from bokeh.plotting import figure, save, curdoc
 from aimet_torch.v2.quantsim import QuantizationSimModel
 from aimet_torch.utils import get_ordered_list_of_modules
 from aimet_torch.v2.quantization.base import QuantizerBase
-from aimet_torch.v2.quantization.encoding_analyzer import _MinMaxObserver
+from aimet_torch.v2.quantization.encoding_analyzer import _MinMaxObserver, _HistogramObserver
 
 
-def visualize_stats(sim: QuantizationSimModel, dummy_input, save_path: str = None) -> None:
+def _visualize(sim: QuantizationSimModel, dummy_input, mode: str, percentile_list: list = None, save_path: str = "./quant_stats_visualization.html") -> None:
+    """
+    Helper function for the visualization APIs.
+
+    :param sim: Calibrated QuantSim Object.
+    :param dummy_input: Dummy Input.
+    :param mode: Whether to plot basic or advanced stats.
+    :param percentile_list: Percentiles to be extracted and used.
+    :param save_path: Path for saving the visualization. Format is 'path_to_dir/file_name.html'. Default is './quant_stats_visualization.html'.
+    """
+
+    # Ensure that sim is an instance of aimet_torch.quantsim.QuantizationSimModel
+    if not isinstance(sim, QuantizationSimModel):
+        raise TypeError(f"Expected type 'aimet_torch.v2.quantsim.QuantizationSimModel', got '{type(sim)}'.")
+
+    if percentile_list is None:
+        raise ValueError("percentile_list cannot be None. Consider providing an empty percentile_list if needed.")
+
+    # Ensure that the save path is valid
+    _check_path(save_path)
+
+    # Topologically sort the quantized modules into an ordered list for easier indexing in the plots
+    ordered_list = get_ordered_list_of_modules(sim.model, dummy_input)
+    stats_list = []
+
+    # Collect stats from observers
+    for i in ordered_list:
+        module_stats = _get_observer_stats(i, percentile_list=percentile_list)
+        if module_stats is not None:
+            stats_list.append(module_stats)
+
+    # Raise an error if no stats were found
+    if len(stats_list) == 0:
+        raise RuntimeError(
+            "No stats found to plot. Either there were no quantized modules, or calibration was not performed before calling this function, or no observers of type _MinMaxObserver or _HistogramObserver were present.")
+
+    stats_dict = dict()
+    keys_list = ["name", 0, 100] + percentile_list
+    stats_dict["idx"] = list(range(len(stats_list)))
+    for i in keys_list:
+        stats_dict[i] = [None] * len(stats_list)
+    for idx, stats in enumerate(stats_list):
+        for i in keys_list:
+            stats_dict[i][idx] = stats[i]
+
+    visualizer = QuantStatsVisualizer(stats_dict)
+
+    # Save an interactive bokeh plot as a standalone html
+    visualizer.export_plot_as_html(save_path)
+
+
+def visualize_stats(sim: QuantizationSimModel, dummy_input, save_path: str = "./quant_stats_visualization.html") -> None:
     """Produces an interactive html to view the stats collected by each quantizer during calibration
 
     .. note::
 
         The QuantizationSimModel input is expected to have been calibrated before using this function. Stats will only
         be plotted for activations/parameters with quantizers containing calibration statistics.
-
-        Currently, this tool is only compatible with quantizers containing :class:`MinMaxEncodingAnalyzer` encoding
-        analyzers (i.e., :attr:`QuantScheme.post_training_tf` and :attr:`QuantScheme.training_range_learning_with_tf_init`
-        quant schemes).
 
     Creates an interactive visualization of min and max activations/weights of all quantized modules in the input
     QuantSim object. The features include:
@@ -87,44 +135,50 @@ def visualize_stats(sim: QuantizationSimModel, dummy_input, save_path: str = Non
     :param save_path: Path for saving the visualization. Default is "./quant_stats_visualization.html"
     """
 
-    # Ensure that sim is an instance of aimet_torch.quantsim.QuantizationSimModel
-    if not isinstance(sim, QuantizationSimModel):
-        raise TypeError(f"Expected type 'aimet_torch.v2.quantsim.QuantizationSimModel', got '{type(sim)}'.")
-
-    # Ensure that the path is valid
-    check_path(save_path)
-
-    # Flatten the quantized modules into an ordered list for easier indexing in the plots
-    ordered_list = (get_ordered_list_of_modules(sim.model, dummy_input))
-    namelist = []
-    minlist = []
-    maxlist = []
-
-    # Collect stats from observers
-    for module in ordered_list:
-        module_name, module_min, module_max = get_observer_stats(module)
-        if module_name is not None:
-            namelist.append(module_name)
-            minlist.append(module_min)
-            maxlist.append(module_max)
-
-    # Raise an error if no stats were found
-    if len(namelist) == 0:
-        raise RuntimeError(
-            "No stats found to plot. Either there were no quantized modules, or calibration was not performed before calling this function, or observers of type other than _MinMaxObserver were used.")
-
-    idx = list(range(len(namelist)))
-
-    # Save an interactive bokeh plot as a standalone html in the specified directory with the specified name if provided
-    if not save_path:
-        save_path = "quant_stats_visualization.html"
-    check_path(save_path)
-
-    visualizer = QuantStatsVisualizer(idx, namelist, minlist, maxlist)
-    visualizer.export_plot_as_html(save_path)
+    percentile_list = []
+    _visualize(sim, dummy_input, mode="basic", percentile_list=percentile_list, save_path=save_path)
 
 
-def check_path(path: str):
+def visualize_advanced_stats(sim: QuantizationSimModel, dummy_input, additional_percentiles: tuple = (1, 99), save_path: str = "./quant_advanced_stats_visualization.html") -> None:
+    """Produces an interactive html to view the advanced stats collected by each quantizer during calibration
+
+    .. note::
+
+        The QuantizationSimModel input is expected to have been calibrated before using this function. Stats will only
+        be plotted for activations/parameters with quantizers containing calibration statistics.
+
+    Creates an interactive visualization of min and max activations/weights of all quantized modules in the input
+    QuantSim object. The features include:
+
+        - Adjustable threshold values to flag layers whose min or max activations/weights exceed the set thresholds
+        - Table containing names and ranges for layers exceeding threshold values
+        - Select different views of the table to group layers exceeding threshold values
+        - Filter layers listed in the table by name
+        - Select one or more layers from the table for advanced analysis
+
+    Saves the visualization as a .html at the given path.
+
+    Example:
+
+        >>> sim = aimet_torch.v2.quantsim.QuantizationSimModel(model, dummy_input, quant_scheme=QuantScheme.post_training_tf_enhanced)
+        >>> with aimet_torch.v2.nn.compute_encodings(sim.model):
+        ...     for data, _ in data_loader:
+        ...         sim.model(data)
+        ...
+        >>> visualize_advanced_stats(sim, dummy_input, "./quant_advanced_stats_visualization.html")
+
+    :param sim: Calibrated QuantizationSimModel
+    :param dummy_input: Sample input used to trace the model
+    :param additional_percentiles: Percentiles other than those related to the boxplot (25, 50, 75) to be shown.
+    :param save_path: Path for saving the visualization. Default is "./quant_advanced_stats_visualization.html"
+    """
+
+    percentile_list = _add_key_percentiles(additional_percentiles)
+    percentile_list = sorted(percentile_list)
+    _visualize(sim, dummy_input, mode="advanced", percentile_list=percentile_list, save_path=save_path)
+
+
+def _check_path(path: str):
     """ Function for sanity check on the given path """
     path_to_directory = os.path.dirname(path)
     if path_to_directory != '' and not os.path.exists(path_to_directory):
@@ -133,18 +187,105 @@ def check_path(path: str):
         raise ValueError("'save_path' must end with '.html'.")
 
 
-def get_observer_stats(module):
+def _get_observer_stats(module, percentile_list):
     """
-    Extract stats from observer
+    Function to extract stats from an observer.
+    Handles observers of types _MinMaxObserver, _HistogramObserver.
     """
-    if isinstance(module[1], QuantizerBase):
-        if isinstance(module[1].encoding_analyzer.observer, _MinMaxObserver):
-            rng = module[1].encoding_analyzer.observer.get_stats()
-            if (rng.min is not None) and (rng.max is not None):
-                return module[0], torch.min(rng.min).item(), torch.max(rng.max).item()
-        # TODO - Handle other quant schemes
+    module_name, module_quantizer = module[0], module[1]
+    if isinstance(module_quantizer, QuantizerBase):
+        if isinstance(module_quantizer.encoding_analyzer.observer, _MinMaxObserver):
+            rng = module_quantizer.encoding_analyzer.observer.get_stats()
+            if rng.min is not None:
+                stats = dict()
+                stats["name"] = module_name
+                stats[0] = torch.min(rng.min).item()
+                stats[100] = torch.max(rng.max).item()
+                for p in percentile_list:
+                    stats[p] = None
+                return stats
 
-    return None, None, None
+        elif isinstance(module_quantizer.encoding_analyzer.observer, _HistogramObserver):
+            histogram_list = module_quantizer.encoding_analyzer.observer.get_stats()
+            if len(histogram_list) == 1:
+                histogram = histogram_list[0]
+                if histogram.min is not None:
+                    stats = dict()
+                    stats["name"] = module_name
+                    stats[0] = histogram.min.item()
+                    stats[100] = histogram.max.item()
+                    _get_advanced_stats_from_histogram(histogram, stats, percentile_list)
+                    return stats
+            elif len(histogram_list) > 1:
+                stats = dict()
+                stats["name"] = module_name
+                curmin = float("inf")
+                curmax = float("-inf")
+                for histogram in histogram_list:
+                    if histogram.min is not None:
+                        curmin = min(curmin, histogram.min.item())
+                        curmax = max(curmax, histogram.max.item())
+                if curmin < float("inf"):
+                    stats[0] = curmin
+                    stats[100] = curmax
+                    for p in percentile_list:
+                        stats[p] = None
+                    return stats
+
+    return None
+
+
+def _add_key_percentiles(percentiles: tuple):
+    """ Add percentiles required for boxplot if not already present """
+    percentile_list = list(percentiles)
+    for p in [25, 50, 75]:
+        if p not in percentile_list:
+            percentile_list.append(p)
+    return percentile_list
+
+
+def _get_advanced_stats_from_histogram(histogram, stats, percentile_list):
+    """ High level function to extract advanced stats from a histogram object """
+    if len(percentile_list) > 0:
+        percentile_stats = _get_percentile_stats_from_histogram(histogram, percentile_list)
+        for i, percentile in enumerate(percentile_list):
+            stats[percentile] = percentile_stats[i]
+
+
+def _get_percentile_stats_from_histogram(histogram, percentile_list):
+    """ Function to extract percentile stats from a histogram object """
+    if len(percentile_list) == 0:
+        raise RuntimeError("'percentile_list' cannot be empty.'")
+    if not _is_sorted(percentile_list):
+        raise RuntimeError("'percentile_list' must be sorted before calling this function.")
+
+    n = torch.sum(histogram.histogram).item()
+    cum_f = 0
+    idx = 0
+    percentile_stats = []
+    for i in range(len(histogram.histogram)):
+        f = histogram.histogram[i].item()
+        if f > 0:
+            bin_low = histogram.bin_edges[i].item()
+            bin_high = histogram.bin_edges[i + 1].item()
+            while True:
+                if (cum_f + f) / n >= percentile_list[idx] / 100:
+                    percentile_stats.append(bin_low + ((n * percentile_list[idx] / 100 - cum_f) / f) * (bin_high - bin_low))
+                    idx += 1
+                    if idx == len(percentile_list):
+                        return percentile_stats
+                else:
+                    break
+        cum_f += f
+
+    return None
+
+
+def _is_sorted(arr: list):
+    for i in range(len(arr) - 1):
+        if arr[i] > arr[i + 1]:
+            return False
+    return True
 
 
 class DataSources:
@@ -153,18 +294,20 @@ class DataSources:
     """
 
     def __init__(self,
-                 idx: list,
-                 namelist: list,
-                 minlist: list,
-                 maxlist: list,
+                 stats_dict: dict,
                  plot: figure,
                  default_values: dict,
                  ):
         self.data_source = ColumnDataSource(
-            data=dict(idx=idx, namelist=namelist, minlist=minlist, maxlist=maxlist,
-                      marker_yminlist=[default_values['default_ymin']] * len(idx),
-                      marker_ymaxlist=[default_values['default_ymax']] * len(idx),
-                      selected=[False] * len(idx)))
+            data=dict(idx=stats_dict["idx"], namelist=stats_dict["name"], minlist=stats_dict[0],
+                      maxlist=stats_dict[100],
+                      marker_yminlist=[default_values['default_ymin']] * len(stats_dict["idx"]),
+                      marker_ymaxlist=[default_values['default_ymax']] * len(stats_dict["idx"]),
+                      selected=[False] * len(stats_dict["idx"])))
+        for key in stats_dict.keys():
+            if key not in ["idx", "name", 0, 100]:
+                self.data_source.add(data=stats_dict[key], name=str(key) + "%ilelist")
+
         self.default_values_source = ColumnDataSource(
             data=dict(default_ymax=[default_values['default_ymax']],
                       default_ymin=[default_values['default_ymin']],
@@ -172,22 +315,29 @@ class DataSources:
                       default_minclip=[default_values['default_minclip']],
                       default_xmax=[default_values['default_xmax']],
                       default_xmin=[default_values['default_xmin']]))
+
         self.limits_source = ColumnDataSource(
             data=dict(ymax=[default_values['default_ymax']], ymin=[default_values['default_ymin']],
                       xmin=[plot.x_range.start], xmax=[plot.x_range.end],
                       minclip=[default_values['default_minclip']],
                       maxclip=[default_values['default_maxclip']]))
+
         self.table_data_source = ColumnDataSource(
             data=dict(idx=[], namelist=[], minlist=[], maxlist=[]))
+
         self.selected_data_source = ColumnDataSource(
             data=dict(idx=[], namelist=[], floor=[], ceil=[], minlist=[], maxlist=[])
         )
+        for key in stats_dict.keys():
+            if key not in ["idx", "name", 0, 100]:
+                self.selected_data_source.add(data=[], name=str(key) + "%ilelist")
 
 
 class TableFilters:
     """
     Class for holding data filters.
     """
+
     def __init__(self, data_sources: DataSources):
         self.name_filter = BooleanFilter()
         self.name_filter.booleans = [True for _ in range(len(data_sources.data_source.data['idx']))]
@@ -201,6 +351,7 @@ class TableViews:
     """
     Class for holding views of the data sources.
     """
+
     def __init__(self, tablefilters: TableFilters):
         self.min_thresh_view = CDSView(filter=tablefilters.min_thresh_filter)
         self.max_thresh_view = CDSView(filter=tablefilters.max_thresh_filter)
@@ -216,13 +367,17 @@ class TableObjects:
         self.views = TableViews(self.filters)
 
         columns = [
-            TableColumn(field="idx", title="Layer Index", width=QuantStatsVisualizer.table_column_widths["Layer Index"]),
+            TableColumn(field="idx", title="Layer Index",
+                        width=QuantStatsVisualizer.table_column_widths["Layer Index"]),
             TableColumn(field="namelist", title="Layer Name",
-                        formatter=StringFormatter(font_style="bold"), width=QuantStatsVisualizer.table_column_widths["Layer Name"]),
+                        formatter=StringFormatter(font_style="bold"),
+                        width=QuantStatsVisualizer.table_column_widths["Layer Name"]),
             TableColumn(field="minlist", title="Min Activation",
-                        formatter=ScientificFormatter(precision=3), width=QuantStatsVisualizer.table_column_widths["Min Activation"]),
+                        formatter=ScientificFormatter(precision=3),
+                        width=QuantStatsVisualizer.table_column_widths["Min Activation"]),
             TableColumn(field="maxlist", title="Max Activation",
-                        formatter=ScientificFormatter(precision=3), width=QuantStatsVisualizer.table_column_widths["Max Activation"]),
+                        formatter=ScientificFormatter(precision=3),
+                        width=QuantStatsVisualizer.table_column_widths["Max Activation"]),
         ]
 
         self.data_table = DataTable(source=datasources.table_data_source, columns=columns,
@@ -286,10 +441,7 @@ class QuantStatsVisualizer:
     """
     Class for constructing the visualization with functionality to export the plot as
 
-    :param idx: List with indexing for the ordered list of quantized modules.
-    :param namelist: List containing names of the ordered list of quantized modules.
-    :param minlist: List containing min activations of the ordered list of quantized modules.
-    :param maxlist: List containing max activations of the ordered list of quantized modules.
+    :param stats_dict: Dictionary containing the module names, indices, and other extracted statistics
     """
 
     # Class level constants
@@ -301,11 +453,8 @@ class QuantStatsVisualizer:
                            "Min Activation": 100,
                            "Max Activation": 100}
 
-    def __init__(self, idx: list, namelist: list, minlist: list, maxlist: list):
-        self.idx = idx
-        self.namelist = namelist
-        self.minlist = minlist
-        self.maxlist = maxlist
+    def __init__(self, stats_dict: dict):
+        self.stats_dict = stats_dict
         self.plot = figure(
             title="Min Max Activations/Weights of quantized modules for given model",
             x_axis_label="Layer index",
@@ -315,30 +464,32 @@ class QuantStatsVisualizer:
 
     def _add_plot_lines(self, datasources: DataSources):
         self.plot.segment(x0='xmin', x1='xmax', y0='ymin', y1='ymin', line_width=4, line_color='black',
-                       source=datasources.limits_source)
+                          source=datasources.limits_source)
         self.plot.segment(x0='xmin', x1='xmax', y0='ymax', y1='ymax', line_width=4, line_color='black',
-                       source=datasources.limits_source)
+                          source=datasources.limits_source)
         self.plot.segment(x0='xmin', x1='xmax', y0='minclip', y1='minclip', line_width=2, line_color='black',
-                       line_dash='dashed',
-                       source=datasources.limits_source)
+                          line_dash='dashed',
+                          source=datasources.limits_source)
         self.plot.segment(x0='xmin', x1='xmax', y0='maxclip', y1='maxclip', line_width=2, line_color='black',
-                       line_dash='dashed',
-                       source=datasources.limits_source)
+                          line_dash='dashed',
+                          source=datasources.limits_source)
         self.plot.line('idx', 'maxlist', source=datasources.data_source, legend_label="Max Activation", line_width=2,
-                    line_color="red")
+                       line_color="red")
         self.plot.line('idx', 'minlist', source=datasources.data_source, legend_label="Min Activation", line_width=2,
-                    line_color="blue")
-        selections = self.plot.segment(x0='idx', x1='idx', y0='floor', y1='ceil', line_width=2, line_color='yellow',
-                                    line_alpha=0.3, source=datasources.selected_data_source)
+                       line_color="blue")
+        selections = self.plot.segment(x0='idx', x1='idx', y0='floor', y1='ceil', line_width=2, line_color='goldenrod',
+                                       line_alpha=0.5, source=datasources.selected_data_source)
 
         return selections
 
     def _add_min_max_markers(self, datasources: DataSources, tableobjects: TableObjects):
-        min_markers = self.plot.circle_x('idx', 'marker_yminlist', source=datasources.data_source, size=10, color='orange',
-                                      line_color="navy")
+        min_markers = self.plot.circle_x('idx', 'marker_yminlist', source=datasources.data_source, size=10,
+                                         color='orange',
+                                         line_color="navy")
         min_markers.view = tableobjects.views.min_thresh_view
-        max_markers = self.plot.circle_x('idx', 'marker_ymaxlist', source=datasources.data_source, size=10, color='orange',
-                                      line_color="navy")
+        max_markers = self.plot.circle_x('idx', 'marker_ymaxlist', source=datasources.data_source, size=10,
+                                         color='orange',
+                                         line_color="navy")
         max_markers.view = tableobjects.views.max_thresh_view
 
         return min_markers, max_markers
@@ -367,14 +518,13 @@ class QuantStatsVisualizer:
 
         return marker_hover
 
-
     @staticmethod
     def _get_selection_hovertool(selections):
         format_code = """
-                    if (Math.abs(value) < 1e-3 || Math.abs(value) > 1e3) {
-                    return value.toExponential(2);
+                    if (Math.abs(value) < 1e-3 || Math.abs(value) > 1e5) {
+                    return value.toExponential(3);
                     } else {
-                    return value.toFixed(2);
+                    return value.toFixed(3);
                     }
                 """
 
@@ -411,103 +561,7 @@ class QuantStatsVisualizer:
             max_thresh_filter=tableobjects.filters.max_thresh_filter,
             name_filter=tableobjects.filters.name_filter,
             select=inputwidgets.table_view_select,
-        ), code="""
-                // Function to adaptively format numerical values in scientific notation
-                // if they are large in magnitude
-                function formatValue(value) {
-                    if (Math.abs(value) < 1e-3 || Math.abs(value) > 1e3) {
-                        return value.toExponential(2);
-                    } else {
-                        return value.toFixed(2);
-                    }
-                }
-
-                function booleanAnd(arr1, arr2) {
-                    return arr1.map((value, index) => value && arr2[index]);
-                }
-
-                function booleanOr(arr1, arr2) {
-                    return arr1.map((value, index) => value || arr2[index]);
-                }
-
-                function findMin(a, b) {
-                    if (a<=b) {
-                        return a;
-                    }
-                    return b;
-                }
-
-                function findMax(a, b) {
-                    if (a>=b) {
-                        return a;
-                    }
-                    return b;
-                }
-
-
-                // Reading values from input widgets and setting plot y axis range  
-                const limits_data = limits_source.data;
-                limits_data['ymax'] = [parseFloat(ymax_input.value)];
-                limits_data['ymin'] = [parseFloat(ymin_input.value)];
-                plot.y_range.start = limits_data['ymin'][0]*1.05;
-                plot.y_range.end = limits_data['ymax'][0]*1.05;
-                limits_data['maxclip'] = [parseFloat(maxclip_input.value)];
-                limits_data['minclip'] = [parseFloat(minclip_input.value)];
-
-                const source_data = data_source.data;
-                const idx = source_data['idx'];
-                const minlist = source_data['minlist'];
-                const maxlist = source_data['maxlist'];
-                const namelist = source_data['namelist'];
-                source_data['marker_yminlist'] = source_data['minlist'].map(t => findMax(t, limits_data['ymin'][0]));
-                source_data['marker_ymaxlist'] = source_data['maxlist'].map(t => findMin(t, limits_data['ymax'][0]));
-                
-                // Updating the filters for finding layers that cross the min or max thresholds
-                min_thresh_filter.booleans = minlist.map(t => t <= limits_data['minclip'][0]);
-                max_thresh_filter.booleans = maxlist.map(t => t >= limits_data['maxclip'][0]);
-
-                let table_booleans;
-                const table_idx = [];
-                const table_namelist = [];
-                const table_minlist = [];
-                const table_maxlist = [];
-
-                var view = select.value;
-                if (view == "All") {
-                    table_booleans = name_filter.booleans;
-                } else if (view == "Min") {
-                    table_booleans = booleanAnd(name_filter.booleans, min_thresh_filter.booleans);
-                } else if (view == "Max") {
-                    table_booleans = booleanAnd(name_filter.booleans, max_thresh_filter.booleans);
-                } else if (view == "Min | Max") {
-                    table_booleans = booleanAnd(name_filter.booleans, booleanOr(min_thresh_filter.booleans, max_thresh_filter.booleans));
-                } else if (view == "Min & Max") {
-                    table_booleans = booleanAnd(name_filter.booleans, booleanAnd(min_thresh_filter.booleans, max_thresh_filter.booleans));
-                }
-
-                for (let i = 0; i < idx.length; i++) {
-                    if (table_booleans[i] == true) {
-                        table_idx.push(idx[i]);
-                        table_namelist.push(namelist[i]);
-                        table_minlist.push(minlist[i]);
-                        table_maxlist.push(maxlist[i]);
-                    }
-                }
-
-                table_data_source.data["idx"] = table_idx;
-                table_data_source.data["namelist"] = table_namelist;
-                table_data_source.data["minlist"] = table_minlist;
-                table_data_source.data["maxlist"] = table_maxlist;
-
-                selected_data_source.data["floor"].push(limits_source.data['ymin'][0]*1.05);
-                selected_data_source.data["ceil"].push(limits_source.data['ymax'][0]*1.05);  
-
-                // Emitting the changes made to ColumnDataSources
-                limits_source.change.emit();
-                data_source.change.emit();
-                table_data_source.change.emit();
-                selected_data_source.change.emit();
-            """)
+        ), code=(Path(__file__).parent / "quant_stats_visualization_JS_code/utils.js").read_text("utf8") + (Path(__file__).parent / "quant_stats_visualization_JS_code/limit_change_callback.js").read_text("utf8"))
 
         customcallbacks.reset_callback = CustomJS(args=dict(
             limits_source=datasources.limits_source,
@@ -527,125 +581,7 @@ class QuantStatsVisualizer:
             min_thresh_filter=tableobjects.filters.min_thresh_filter,
             max_thresh_filter=tableobjects.filters.max_thresh_filter,
             name_filter=tableobjects.filters.name_filter,
-        ), code="""
-                // Function to adaptively format numerical values in scientific notation
-                // if they are large in magnitude
-                function formatValue(value) {
-                    if (Math.abs(value) < 1e-3 || Math.abs(value) > 1e3) {
-                        return value.toExponential(2);
-                    } else {
-                        return value.toFixed(2);
-                    }
-                }
-
-                function booleanAnd(arr1, arr2) {
-                    return arr1.map((value, index) => value && arr2[index]);
-                }
-
-                function booleanOr(arr1, arr2) {
-                    return arr1.map((value, index) => value || arr2[index]);
-                }
-
-                function findMin(a, b) {
-                    if (a<=b) {
-                        return a;
-                    }
-                    return b;
-                }
-
-                function findMax(a, b) {
-                    if (a>=b) {
-                        return a;
-                    }
-                    return b;
-                }
-
-                // Resetting the limits source with default values
-                limits_source.data['ymax'] = default_values_source.data['default_ymax'];
-                limits_source.data['ymin'] = default_values_source.data['default_ymin'];
-                limits_source.data['xmax'] = default_values_source.data['default_xmax'];
-                limits_source.data['xmin'] = default_values_source.data['default_xmin'];
-                limits_source.data['maxclip'] = default_values_source.data['default_maxclip'];
-                limits_source.data['minclip'] = default_values_source.data['default_minclip'];
-                const limits_data = limits_source.data;
-
-                // Resetting the plot ranges
-                plot.y_range.start = limits_data['ymin'][0]*1.05;
-                plot.y_range.end = limits_data['ymax'][0]*1.05;
-                plot.x_range.start = limits_data['xmin'][0];
-                plot.x_range.end = limits_data['xmax'][0];
-
-                // Resetting the input widget values
-                ymax_input.value = limits_data['ymax'][0].toString();
-                ymin_input.value = limits_data['ymin'][0].toString();
-                maxclip_input.value = limits_data['maxclip'][0].toString();
-                minclip_input.value = limits_data['minclip'][0].toString();
-
-                const source_data = data_source.data;
-                const idx = source_data['idx'];
-                const minlist = source_data['minlist'];
-                const maxlist = source_data['maxlist'];
-                const namelist = source_data['namelist'];
-
-                source_data['marker_yminlist'] = source_data['minlist'].map(t => findMax(t, limits_data['ymin'][0]));
-                source_data['marker_ymaxlist'] = source_data['maxlist'].map(t => findMin(t, limits_data['ymax'][0]));
-
-                min_thresh_filter.booleans = minlist.map(t => t <= limits_data['minclip'][0]);
-                max_thresh_filter.booleans = maxlist.map(t => t >= limits_data['maxclip'][0]);
-
-                name_filter.booleans = Array(idx.length).fill(true);
-                name_input.value = "";
-
-                let table_booleans;
-                const table_idx = [];
-                const table_namelist = [];
-                const table_minlist = [];
-                const table_maxlist = [];
-
-                select.value = "Min | Max";
-                var view = select.value;
-                if (view == "All") {
-                    table_booleans = name_filter.booleans;
-                } else if (view == "Min") {
-                    table_booleans = booleanAnd(name_filter.booleans, min_thresh_filter.booleans);
-                } else if (view == "Max") {
-                    table_booleans = booleanAnd(name_filter.booleans, max_thresh_filter.booleans);
-                } else if (view == "Min | Max") {
-                    table_booleans = booleanAnd(name_filter.booleans, booleanOr(min_thresh_filter.booleans, max_thresh_filter.booleans));
-                } else if (view == "Min & Max") {
-                    table_booleans = booleanAnd(name_filter.booleans, booleanAnd(min_thresh_filter.booleans, max_thresh_filter.booleans));
-                }
-
-                for (let i = 0; i < idx.length; i++) {
-                    if (table_booleans[i] == true) {
-                        table_idx.push(idx[i]);
-                        table_namelist.push(namelist[i]);
-                        table_minlist.push(minlist[i]);
-                        table_maxlist.push(maxlist[i]);
-                    }
-                }
-
-                table_data_source.data["idx"] = table_idx;
-                table_data_source.data["namelist"] = table_namelist;
-                table_data_source.data["minlist"] = table_minlist;
-                table_data_source.data["maxlist"] = table_maxlist;
-
-                table_data_source.selected.indices = [];
-                data_source.data["selected"] = Array(data_source.data["idx"].length).fill(false);
-
-                selected_data_source.data["idx"] = [];
-                selected_data_source.data["namelist"] = [];
-                selected_data_source.data["floor"] = [];
-                selected_data_source.data["ceil"] = [];
-                selected_data_source.data["minlist"] = [];
-                selected_data_source.data["maxlist"] = [];
-
-                // Emitting the changes made to ColumnDataSources
-                limits_source.change.emit();
-                data_source.change.emit();
-                table_data_source.change.emit();
-                selected_data_source.change.emit();
-            """)
+        ), code=(Path(__file__).parent / "quant_stats_visualization_JS_code/utils.js").read_text("utf8") + (Path(__file__).parent / "quant_stats_visualization_JS_code/reset_callback.js").read_text("utf8"))
 
         customcallbacks.name_filter_callback = CustomJS(args=dict(
             data_source=datasources.data_source,
@@ -655,74 +591,7 @@ class QuantStatsVisualizer:
             max_thresh_filter=tableobjects.filters.max_thresh_filter,
             name_filter=tableobjects.filters.name_filter,
             select=inputwidgets.table_view_select,
-        ), code="""
-                function booleanAnd(arr1, arr2) {
-                    return arr1.map((value, index) => value && arr2[index]);
-                }
-
-                function booleanOr(arr1, arr2) {
-                    return arr1.map((value, index) => value || arr2[index]);
-                }
-                // Filter all names having entered pattern as a substring
-                name_filter.booleans = Array.from(data_source.data['namelist']).map(t => t.includes(cb_obj.value));
-
-                const limits_data = limits_source.data;
-                const source_data = data_source.data;
-                const idx = source_data['idx'];
-                const minlist = source_data['minlist'];
-                const maxlist = source_data['maxlist'];
-                const namelist = source_data['namelist'];
-
-                let table_booleans;
-                const table_idx = [];
-                const table_namelist = [];
-                const table_minlist = [];
-                const table_maxlist = [];
-
-                var view = select.value;
-                if (view == "All") {
-                    table_booleans = name_filter.booleans;
-                } else if (view == "Min") {
-                    table_booleans = booleanAnd(name_filter.booleans, min_thresh_filter.booleans);
-                } else if (view == "Max") {
-                    table_booleans = booleanAnd(name_filter.booleans, max_thresh_filter.booleans);
-                } else if (view == "Min | Max") {
-                    table_booleans = booleanAnd(name_filter.booleans, booleanOr(min_thresh_filter.booleans, max_thresh_filter.booleans));
-                } else if (view == "Min & Max") {
-                    table_booleans = booleanAnd(name_filter.booleans, booleanAnd(min_thresh_filter.booleans, max_thresh_filter.booleans));
-                }
-
-                for (let i = 0; i < idx.length; i++) {
-                    if (table_booleans[i] == true) {
-                        table_idx.push(idx[i]);
-                        table_namelist.push(namelist[i]);
-                        table_minlist.push(minlist[i]);
-                        table_maxlist.push(maxlist[i]);
-                    }
-                }
-
-                table_data_source.data["idx"] = table_idx;
-                table_data_source.data["namelist"] = table_namelist;
-                table_data_source.data["minlist"] = table_minlist;
-                table_data_source.data["maxlist"] = table_maxlist; 
-
-                table_data_source.change.emit();
-
-                const selected_indices = [];
-                var layer_idx;
-                for (let i = 0; i < table_idx.length; i++) {
-                    layer_idx = table_idx[i];
-                    if (data_source.data["selected"][layer_idx] == true) {
-                        selected_indices.push(i);
-                    }
-                }
-
-                table_data_source.selected.indices = selected_indices;
-
-                table_data_source.change.emit();
-                table.name = "placeholder_1";
-                table.name = "placeholder_0";
-            """)
+        ), code=(Path(__file__).parent / "quant_stats_visualization_JS_code/utils.js").read_text("utf8") + (Path(__file__).parent / "quant_stats_visualization_JS_code/name_filter_callback.js").read_text("utf8"))
 
         customcallbacks.select_table_view_callback = CustomJS(args=dict(
             data_source=datasources.data_source,
@@ -732,109 +601,14 @@ class QuantStatsVisualizer:
             max_thresh_filter=tableobjects.filters.max_thresh_filter,
             name_filter=tableobjects.filters.name_filter,
             table=tableobjects.data_table
-        ), code="""
-                function booleanAnd(arr1, arr2) {
-                    return arr1.map((value, index) => value && arr2[index]);
-                }
-
-                function booleanOr(arr1, arr2) {
-                    return arr1.map((value, index) => value || arr2[index]);
-                }
-
-                const source_data = data_source.data;
-                const idx = source_data['idx'];
-                const minlist = source_data['minlist'];
-                const maxlist = source_data['maxlist'];
-                const namelist = source_data['namelist'];
-
-                let table_booleans;
-                const table_idx = [];
-                const table_namelist = [];
-                const table_minlist = [];
-                const table_maxlist = [];
-
-                var view = select.value;
-                if (view == "All") {
-                    table_booleans = name_filter.booleans;
-                } else if (view == "Min") {
-                    table_booleans = booleanAnd(name_filter.booleans, min_thresh_filter.booleans);
-                } else if (view == "Max") {
-                    table_booleans = booleanAnd(name_filter.booleans, max_thresh_filter.booleans);
-                } else if (view == "Min | Max") {
-                    table_booleans = booleanAnd(name_filter.booleans, booleanOr(min_thresh_filter.booleans, max_thresh_filter.booleans));
-                } else if (view == "Min & Max") {
-                    table_booleans = booleanAnd(name_filter.booleans, booleanAnd(min_thresh_filter.booleans, max_thresh_filter.booleans));
-                }
-
-                for (let i = 0; i < idx.length; i++) {
-                    if (table_booleans[i] == true) {
-                        table_idx.push(idx[i]);
-                        table_namelist.push(namelist[i]);
-                        table_minlist.push(minlist[i]);
-                        table_maxlist.push(maxlist[i]);
-                    }
-                }
-
-                table_data_source.data["idx"] = table_idx;
-                table_data_source.data["namelist"] = table_namelist;
-                table_data_source.data["minlist"] = table_minlist;
-                table_data_source.data["maxlist"] = table_maxlist;
-
-                table_data_source.change.emit();
-
-                const selected_indices = [];
-                var layer_idx; 
-                for (let i = 0; i < table_idx.length; i++) {
-                    layer_idx = table_idx[i];
-                    if (data_source.data["selected"][layer_idx] == true) {
-                        selected_indices.push(i);
-                    }
-                }
-
-                table_data_source.selected.indices = selected_indices;
-
-                table_data_source.change.emit();
-                
-                // Force redraw of table by making an inert change to table properties
-                table.name = "placeholder_1";
-                table.name = "placeholder_0";
-        """)
+        ), code=(Path(__file__).parent / "quant_stats_visualization_JS_code/utils.js").read_text("utf8") + (Path(__file__).parent / "quant_stats_visualization_JS_code/select_table_view_callback.js").read_text("utf8"))
 
         customcallbacks.table_selection_callback = CustomJS(args=dict(
             data_source=datasources.data_source,
             table_data_source=datasources.table_data_source,
             selected_data_source=datasources.selected_data_source,
             limits_source=datasources.limits_source,
-        ), code="""
-                table_data_source.data["idx"].forEach(i => {
-                    data_source.data["selected"][i] = false;
-                });
-                table_data_source.selected.indices.forEach(i => {
-                    let layer_idx = table_data_source.data["idx"][i];
-                    data_source.data["selected"][layer_idx] = true;
-                });
-                data_source.change.emit();
-
-                selected_data_source.data["namelist"] = [];
-                selected_data_source.data["idx"] = [];
-                selected_data_source.data["floor"] = [];
-                selected_data_source.data["ceil"] = [];
-                selected_data_source.data["minlist"] = [];
-                selected_data_source.data["maxlist"] = [];
-                selected_data_source.change.emit();
-
-                data_source.data["selected"].forEach((bool,index) => {
-                    if (bool==true) {
-                        selected_data_source.data["namelist"].push(data_source.data["namelist"][index]);
-                        selected_data_source.data["idx"].push(index);
-                        selected_data_source.data["floor"].push(limits_source.data['ymin'][0]*1.05);
-                        selected_data_source.data["ceil"].push(limits_source.data['ymax'][0]*1.05);
-                        selected_data_source.data["minlist"].push(data_source.data["minlist"][index]);
-                        selected_data_source.data["maxlist"].push(data_source.data["maxlist"][index]);
-                    }
-                })
-                selected_data_source.change.emit();
-        """)
+        ), code=(Path(__file__).parent / "quant_stats_visualization_JS_code/utils.js").read_text("utf8") + (Path(__file__).parent / "quant_stats_visualization_JS_code/table_selection_callback.js").read_text("utf8"))
 
         return customcallbacks
 
@@ -848,12 +622,12 @@ class QuantStatsVisualizer:
         inputwidgets.table_view_select.js_on_change('value', customcallbacks.select_table_view_callback)
         datasources.table_data_source.selected.js_on_change('indices', customcallbacks.table_selection_callback)
 
-
     def _create_layout(self, inputwidgets, tableobjects):
         heading_1 = Div(text="<h2>Quant Stats Visualizer</h2>")
         heading_2 = Div(text="<h2>Quant Stats Data Table</h2>")
 
-        sp1 = Spacer(width=QuantStatsVisualizer.spacer_dims["sp1_width"], height=QuantStatsVisualizer.spacer_dims["sp1_height"])
+        sp1 = Spacer(width=QuantStatsVisualizer.spacer_dims["sp1_width"],
+                     height=QuantStatsVisualizer.spacer_dims["sp1_height"])
         row1 = row(inputwidgets.ymin_input, inputwidgets.ymax_input)
         row2 = row(inputwidgets.minclip_input, inputwidgets.maxclip_input)
         inputs1 = column(row1, row2)
@@ -878,23 +652,21 @@ class QuantStatsVisualizer:
         # Defining the default values of plotting parameters
         self.default_values['default_ymax'] = QuantStatsVisualizer.initial_vals["default_ymax"]
         self.default_values['default_ymin'] = QuantStatsVisualizer.initial_vals["default_ymin"]
-        self.default_values['default_xmax'] = len(self.idx) - 1
+        self.default_values['default_xmax'] = len(self.stats_dict["idx"]) - 1
         self.default_values['default_xmin'] = 0
         self.default_values['default_maxclip'] = self.default_values['default_ymax'] / 2
         self.default_values['default_minclip'] = self.default_values['default_ymin'] / 2
 
-        self.plot.x_range = Range1d(0, len(self.idx))
-        self.plot.y_range = Range1d(self.default_values['default_ymax'] * 1.05, self.default_values['default_ymin'] * 1.05)
+        self.plot.x_range = Range1d(0, len(self.stats_dict["idx"]))
+        self.plot.y_range = Range1d(self.default_values['default_ymax'] * 1.05,
+                                    self.default_values['default_ymin'] * 1.05)
 
         # Creating and adding a reset tool
         rt = ResetTool()
         self.plot.add_tools(rt)
 
         # Defining Bokeh ColumnDataSources
-        datasources = DataSources(idx=self.idx,
-                                  namelist=self.namelist,
-                                  minlist=self.minlist,
-                                  maxlist=self.maxlist,
+        datasources = DataSources(stats_dict=self.stats_dict,
                                   plot=self.plot,
                                   default_values=self.default_values,
                                   )
