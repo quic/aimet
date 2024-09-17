@@ -19,8 +19,7 @@ When creating a QuantizationSimModel using AdaRounded, use the QuantizationSimMo
 AdaRound use cases
 ==================
 
-Terminology
------------
+**Terminology**
 
 The following abbreviations are used in the following use case descriptions:
 
@@ -37,8 +36,7 @@ QAT
 { }
  An optional step in the use case
 
-Recommended
------------
+**Recommended**
 
 The following sequences are recommended:
 
@@ -48,8 +46,7 @@ The following sequences are recommended:
  #. AdaRound --> QAT
        AdaRound is a post-training quantization feature, but for some models applying BNF and CLE may not help. For these models, applying AdaRound before QAT might help. AdaRound is a better weights initialization step that speeds up QAT.
 
-Not recommended
-----------------
+**Not recommended**
 
 Applying bias correction (BC) either before or after AdaRound is *not* recommended.
 
