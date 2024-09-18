@@ -14,9 +14,9 @@ Encoding Analyzers
 Variants
 --------
 
-.. autosummary::
-    :toctree: generated
 
-    MinMaxEncodingAnalyzer
-    SqnrEncodingAnalyzer
-    PercentileEncodingAnalyzer
+.. autoclass:: MinMaxEncodingAnalyzer
+
+.. autoclass:: SqnrEncodingAnalyzer
+
+.. autoclass:: PercentileEncodingAnalyzer

@@ -58,6 +58,8 @@ run_acceptance_tests=0
 
 EXIT_CODE=0
 
+variant_docs="tf-torch-cpu"
+
 # Array to store python source file paths
 declare -a PYTHON_SRC_PATHS=()
 # Variable to store python source file paths
@@ -316,7 +318,6 @@ if [ $run_prep -eq 1 ]; then
             pycov_dir_endings+=("TrainingExtensions/torch/src/python:TrainingExtensions/torch/test")
         fi
         if [[ "$AIMET_VARIANT" == *"onnx"* ]]; then
-            python_src_path_endings+=("TrainingExtensions/torch/src/python/aimet_torch")
             python_src_path_endings+=("TrainingExtensions/onnx/src/python/aimet_onnx")
             python_src_path_endings+=("Examples/onnx/quantization")
             python_src_path_endings+=("Examples/onnx/utils")
@@ -413,7 +414,7 @@ if [ $run_build -eq 1 ]; then
             extra_opts+=" -DENABLE_TORCH=ON"
         fi
         if [[ "$AIMET_VARIANT" == *"onnx"* ]]; then
-            extra_opts+=" -DENABLE_ONNX=ON -DENABLE_TORCH=ON"
+            extra_opts+=" -DENABLE_ONNX=ON"
         fi
         if [[ "$AIMET_VARIANT" != *"tf"* ]]; then
             extra_opts+=" -DENABLE_TENSORFLOW=OFF"
@@ -423,6 +424,12 @@ if [ $run_build -eq 1 ]; then
         fi
         if [[ "$AIMET_VARIANT" != *"onnx"* ]]; then
             extra_opts+=" -DENABLE_ONNX=OFF"
+        fi
+        if [[ "$AIMET_VARIANT" == "${variant_docs}" ]]; then
+            #TODO For doc variant, cmake "test" targets are NOT supported at this time
+            extra_opts+=" -DENABLE_TESTS=OFF"
+            # explicitly enable ONNX for docs variant since it is not present in variant string
+            extra_opts+=" -DENABLE_ONNX=ON"
         fi
     fi
     # Do not exit on failure by default from this point forward
