@@ -66,15 +66,8 @@ if(ENABLE_TORCH)
     add_dependencies(doc_v2
         copy_doc_source)
 
-    # doc build can't autogenerate torch docs in tf-only variants. Copy the generated .rst files from doc_v2 build instead
-    add_custom_target(copy_generated_docs
-        COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_CURRENT_BINARY_DIR}/torch_v2/torch_docs/generated ${CMAKE_CURRENT_BINARY_DIR}/torch_docs/generated)
-
-     add_dependencies(copy_generated_docs
-        doc_v2)
-
     add_dependencies(doc
-        copy_generated_docs)
+        doc_v2)
 endif(ENABLE_TORCH)
 
 add_custom_target(copy_doc_source

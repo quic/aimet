@@ -245,6 +245,8 @@ html_context = {
 
 autosummary_generate = False
 
+autodoc_mock_imports = ["onnxscript"]
+
 from pygments.lexers.diff import DiffLexer
 from sphinx.highlighting import lexers
 lexers['diff'] = DiffLexer()
