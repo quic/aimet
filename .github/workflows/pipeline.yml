@@ -1,0 +1,101 @@
+name: CI Pipeline
+
+on:
+  workflow_call:
+
+jobs:
+  docker-tag:
+    name: Check if 'latest' tag could be used (no build docker images)
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.tag.outputs.tag }}
+    steps:
+      - run: |
+          sudo apt update -qq
+          sudo apt install -y git curl jq sudo ca-certificates
+          sudo update-ca-certificates
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/docker-tag
+        id: tag
+        with:
+          dockerfile: Jenkins/fast-release/Dockerfile.ci
+
+  variants:
+    name: Define supported AIMET variants
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.final.outputs.value }}
+    steps:
+      - run: |
+          sudo apt update -qq
+          sudo apt install -y git curl jq sudo ca-certificates
+          sudo update-ca-certificates
+
+      - name: Torch variants
+        run: |
+          set -x
+          VALUE=$(echo "${VALUE:-"{}"}" | jq -c '.include += [
+              { "VER_PYTHON":"3.10", "VER_TENSORFLOW":"",       "VER_TORCH":"2.1.2", "VER_ONNX":"", "VER_CUDA":""       },
+              { "VER_PYTHON":"3.10", "VER_TENSORFLOW":"",       "VER_TORCH":"2.1.2", "VER_ONNX":"", "VER_CUDA":"11.8.0" }
+            ]')
+          echo "VALUE=$VALUE" >> $GITHUB_ENV
+
+      - name: Tensorflow variants
+        run: |
+          set -x
+          VALUE=$(echo "${VALUE:-"{}"}" | jq -c '.include += [
+              { "VER_PYTHON":"3.10", "VER_TENSORFLOW":"2.10.1", "VER_TORCH":"",      "VER_ONNX":"", "VER_CUDA":"" },
+              { "VER_PYTHON":"3.10", "VER_TENSORFLOW":"2.10.1", "VER_TORCH":"",      "VER_ONNX":"", "VER_CUDA":"11.8.0" }
+            ]')
+          echo "VALUE=$VALUE" >> $GITHUB_ENV
+
+      - name: ONNX variants
+        run: |
+          set -x
+          VALUE=$(echo "${VALUE:-"{}"}" | jq -c '.include += [
+              { "VER_PYTHON":"3.10", "VER_TENSORFLOW":"",       "VER_TORCH":"1.13.1", "VER_ONNX":"1.14.1", "VER_CUDA":""       },
+              { "VER_PYTHON":"3.10", "VER_TENSORFLOW":"",       "VER_TORCH":"1.13.1", "VER_ONNX":"1.14.1", "VER_CUDA":"11.7.1" }
+            ]')
+          echo "VALUE=$VALUE" >> $GITHUB_ENV
+
+      - name: (Last step) Generate few extra properties for each variant
+        id: final
+        run: |
+          set -x
+          VALUE=$(echo "$VALUE" | jq -c '.include[] |= . + {
+            "runs-on":(if .VER_CUDA != "" then "k8s-gpu" else "ubuntu-latest" end),
+            "id":(""
+                    +(if .VER_TENSORFLOW != "" then "tf-" else "" end)
+                    +(if .VER_ONNX != "" then "onnx-" elif .VER_TORCH != "" then "torch-" else "" end)
+                    +(if .VER_CUDA != "" then "gpu" else "cpu" end)
+                 )
+            }')
+          echo "value=$VALUE" >> $GITHUB_OUTPUT
+
+  docker-build-image:
+    name: Docker image ${{ matrix.id }}
+    runs-on: ubuntu-latest
+    needs: [docker-tag, variants]
+    strategy:
+      matrix: ${{ fromJSON(needs.variants.outputs.matrix) }}
+    steps:
+      - run: |
+          sudo apt update -qq
+          sudo apt install -y git curl jq sudo ca-certificates
+          sudo update-ca-certificates
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/docker-build-image
+        with:
+          dockerfile: Jenkins/fast-release/Dockerfile.ci
+          docker-login: ${{ secrets.DOCKER_LOGIN }}
+          docker-password: ${{ secrets.DOCKER_CREDENTIALS }}
+          docker-registry: ${{ secrets.DOCKER_REGISTRY }}
+          image-name: "${{ secrets.DOCKER_IMAGE }}-${{ matrix.id }}"
+          image-tag: ${{ needs.docker-tag.outputs.tag }}
+          build-args: |
+            VER_PYTHON=${{ matrix.VER_PYTHON }}
+            VER_CUDA=${{ matrix.VER_CUDA }}
+            VER_TORCH=${{ matrix.VER_TORCH }}
+            VER_TENSORFLOW=${{ matrix.VER_TENSORFLOW }}
+            VER_ONNX=${{ matrix.VER_ONNX }}
+
