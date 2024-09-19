@@ -1,0 +1,11 @@
+name: CI pipeline
+
+on:
+  pull_request:
+    branches: [ develop ]
+
+jobs:
+  pipeline:
+    if: github.server_url != 'https://github.com'
+    uses: ./.github/workflows/pipeline.yml
+    secrets: inherit
