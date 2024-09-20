@@ -2,15 +2,22 @@
 
 .. _ug-spatial-svd:
 
-=================
-AIMET Spatial SVD
-=================
+#################
+AIMET spatial SVD
+#################
 
-Spatial SVD is a tensor decomposition technique which decomposes one large layer (in terms of mac or memory) into two smaller layers. SVD stands for Singular Value Decomposition.
+Spatial singular value decomposition (SSVD) is a technique that decomposes one large convolution (Conv) MAC or memory layer into two smaller layers.
 
-Given a conv layer, with kernel (𝑚,𝑛,ℎ,𝑤) where 𝑚 is the input channels, 𝑛 the output channels, and ℎ, 𝑤 giving the height and width of the kernel itself, Spatial SVD will decompose the kernel into two kernels. One of size (𝑚,𝑘,ℎ,1) and one of size (𝑘,𝑛,1,𝑤), where k is called the rank. The smaller the value of k the larger the degree of compression achieved.
+Consider a Conv layer with kernel (𝑚,𝑛,ℎ,𝑤), where:
 
-The following diagram illustrates this visually. As you can see, Spatial SVD decomposes both the output channel dimension as well as the size of the conv kernel itself. Spatial SVD is currently supported for Conv layers in AIMET.
+- 𝑚 is the input channels
+- 𝑛 the output channels
+- ℎ is the height of the kernel
+- 𝑤 is the width of the kernel 
+  
+SSVD decomposes the kernel into two kernels, one of size (𝑚,𝑘,ℎ,1) and one of size (𝑘,𝑛,1,𝑤), where 𝑘 is called the `rank`. The smaller the value of 𝑘, the larger the degree of compression.
+
+The following figure illustrates how SSVD decomposes both the output channel dimension and the size of the Conv kernel itself. 
 
 .. image:: ../images/spatial_svd.png
     :width: 900px
