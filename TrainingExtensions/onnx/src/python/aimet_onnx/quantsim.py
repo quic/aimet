@@ -567,6 +567,7 @@ class QuantizationSimModel:
                     for _, param_quantizer in param_quantizers.items():
                         param_quantizer.bitwidth = output_quantizer.bitwidth
                         param_quantizer.use_symmetric_encodings = output_quantizer.use_symmetric_encodings
+
             elif op.type == 'MatMul':
                 first_input_quantizer = input_quantizers[0] if input_quantizers else None
                 second_input_quantizer = list(param_quantizers.values())[0] if param_quantizers else None

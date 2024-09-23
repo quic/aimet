@@ -2274,7 +2274,6 @@ def resize_op_model():
         )
     )
     onnx.checker.check_model(model, True)
-    onnx.save(model, 'resize_model.onnx')
     return model
 
 
@@ -2357,6 +2356,52 @@ def model_with_initializers_as_activations():
                     outputs=['model_output'],
                     name='add_0'
                 )
+            ]
+        )
+    )
+    onnx.checker.check_model(model, True)
+    return model
+
+
+def gather_op_model():
+    model = helper.make_model(
+        graph=helper.make_graph(
+            name='GatherModel',
+            inputs=[helper.make_tensor_value_info('model_input', TensorProto.INT64, shape=[1, 4])],
+            outputs=[helper.make_tensor_value_info('model_output', TensorProto.FLOAT, shape=[1, 4, 3])],
+            initializer=[
+                numpy_helper.from_array(np.random.randn(10, 3).astype('float32'), name='gather_weight')
+            ],
+            nodes=[
+                helper.make_node(
+                    'Gather',
+                    inputs=['gather_weight', 'model_input'],
+                    outputs=['model_output'],
+                    name='gather'
+                ),
+            ]
+        )
+    )
+    onnx.checker.check_model(model, True)
+    return model
+
+
+def gather_op_with_int_data_model():
+    model = helper.make_model(
+        graph=helper.make_graph(
+            name='GatherModel',
+            inputs=[helper.make_tensor_value_info('model_input', TensorProto.INT64, shape=[1, 4])],
+            outputs=[helper.make_tensor_value_info('model_output', TensorProto.INT64, shape=[1, 4])],
+            initializer=[
+                numpy_helper.from_array(np.array([1, 3, 224, 224]), name='gather_weight')
+            ],
+            nodes=[
+                helper.make_node(
+                    'Gather',
+                    inputs=['gather_weight', 'model_input'],
+                    outputs=['model_output'],
+                    name='gather'
+                ),
             ]
         )
     )
