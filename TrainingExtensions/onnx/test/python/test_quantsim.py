@@ -1092,3 +1092,22 @@ class TestQuantSim:
 
         for key, enc in encodings["activation_encodings"].items():
             assert len(enc) == 1
+
+    def test_model_with_initializers_as_activations(self):
+        model = models_for_tests.model_with_initializers_as_activations()
+        with tempfile.TemporaryDirectory() as tempdir:
+            sim = QuantizationSimModel(model, path=tempdir)
+
+            def callback(session, dummy_input):
+                session.run(None, dummy_input)
+
+            dummy_tensor = {'model_input': np.random.rand(1, 3, 8, 8).astype(np.float32)}
+            sim.compute_encodings(callback, dummy_tensor)
+            sim.export(tempdir, 'model_with_initializers_as_activations')
+
+            with open(os.path.join(tempdir, 'model_with_initializers_as_activations.encodings')) as json_file:
+                encoding_data = json.load(json_file)
+
+            assert all(x in [i.name for i in model.graph.initializer] for x in ['add_input2', 'mul_input2'])
+            assert encoding_data['activation_encodings']['add_input2']
+            assert encoding_data['activation_encodings']['mul_input2']
