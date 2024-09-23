@@ -350,7 +350,7 @@ class ConnectedGraph(AimetCommonConnectedGraph):
             logger.debug("Created new product %s", product_name)
 
             producer_op = self._ops[producer_node_name]
-            product.tensor_dict[producer_node_name] = producer_op
+            product.tensor_dict[producer_node_name] = output_tensor_name
 
             # Link producer op, product, and current tensor
             producer_op.output = product
@@ -614,7 +614,7 @@ class ConnectedGraph(AimetCommonConnectedGraph):
             "InstanceNormalization": create_weight_bias_params,
             "LayerNormalization": create_weight_bias_params,
             "GroupNormalization": create_weight_bias_params,
-            "MatMul": create_matmul_params
+            "MatMul": create_matmul_params,
         }
 
         for op in self._ops.values():
