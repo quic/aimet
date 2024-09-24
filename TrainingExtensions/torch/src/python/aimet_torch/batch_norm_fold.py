@@ -654,3 +654,4 @@ fold_given_batch_norms = BatchNormFold.fold_given_batch_norms
 # pylint: disable=protected-access
 _is_valid_bn_fold = BatchNormFold._is_valid_bn_fold
 _find_all_batch_norms_to_fold = BatchNormFold._find_all_batch_norms_to_fold
+find_standalone_batchnorm_ops = BatchNormFold.find_standalone_batchnorm_ops
