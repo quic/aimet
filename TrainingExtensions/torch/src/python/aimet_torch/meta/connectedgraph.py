@@ -486,6 +486,8 @@ class ConnectedGraph(AimetCommonConnectedGraph):
             op = self._create_new_multi_output_op('Constant', residing_module=residing_module)
             # pylint: disable=unnecessary-comprehension
             self._add_products_for_op(op, [inp for inp in node.inputs()], outputs, output_map)
+            if isinstance(subgraph_model, torch.nn.Parameter):
+                op.output_products[0].is_parm = True
             for output in outputs:
                 curr_level_tensors.append(output)
             return
@@ -736,6 +738,7 @@ class ConnectedGraph(AimetCommonConnectedGraph):
                             constant_product = self._add_product(f'constant_{self._constant_count}',
                                                                  op.output_products[0].shape)
                             constant_product._is_const = True
+                            constant_product._is_parm = op.output_products[0].is_parm
                             self._constant_count += 1
                             constant_product.add_consumer(consumer)
                             consumer.inputs[product_index] = constant_product
@@ -932,6 +935,7 @@ class ConnectedGraph(AimetCommonConnectedGraph):
                 new_product.producer = product.producer
                 new_product.is_model_input = product.is_model_input
                 new_product.is_const = product.is_const
+                new_product.is_parm = product.is_parm
                 new_product._consumers = [consumer]
                 new_product_dict[new_product.name] = new_product
                 if producer and not producer.output:
