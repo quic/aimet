@@ -36,12 +36,14 @@
 # =============================================================================
 """ Top level API for performing quantization simulation of a pytorch model """
 
-from typing import Union, Tuple
+from typing import Union, Tuple, Optional
+import warnings
 import itertools
 import io
 import contextlib
 import torch
 
+from aimet_common.defs import QuantScheme, QuantizationDataType
 from aimet_torch.quantsim import QuantizationSimModel as V1QuantizationSimModel, logger
 import aimet_torch.quantsim as quantsim_v1
 from aimet_torch.v2 import nn as aimet_nn
@@ -53,7 +55,7 @@ from aimet_torch.v2.quantization.affine import AffineQuantizerBase
 from aimet_torch.v2.quantization.encoding_analyzer import PercentileEncodingAnalyzer
 from aimet_torch.v2.utils import patch_attr
 from aimet_torch import utils
-from aimet_torch.utils import deprecated
+from aimet_torch.utils import deprecated, _red
 from aimet_torch.v2.deepspeed_utils import _register_zero3_forward_hooks
 
 
@@ -68,7 +70,24 @@ class QuantizationSimModel(V1QuantizationSimModel):
     """
     Overriden QuantizationSimModel that does off-target quantization simulation using v2 quantsim blocks.
     """
-    def __init__(self, model, *args, **kwargs): # pylint: disable=arguments-differ
+    def __init__(self, # pylint: disable=too-many-arguments
+                 model: torch.nn.Module,
+                 dummy_input: Union[torch.Tensor, Tuple],
+                 quant_scheme: Union[str, QuantScheme] = QuantScheme.post_training_tf_enhanced,
+                 rounding_mode: Optional[str] = None, # NOTE: Planned to be deprecated
+                 default_output_bw: int = 8,
+                 default_param_bw: int = 8,
+                 in_place: bool = False,
+                 config_file: Optional[str] = None,
+                 default_data_type: QuantizationDataType = QuantizationDataType.int):
+        if rounding_mode:
+            if rounding_mode == 'nearest':
+                warnings.warn(_red("Passing rounding_mode='nearest' is no longer needed "\
+                                   "and will be deprecated soon in the later versions."),
+                              DeprecationWarning, stacklevel=2)
+            else:
+                raise TypeError("'rounding_mode' parameter is no longer supported.")
+
         with _register_zero3_forward_hooks(model, use_dummy_params=True):
             # NOTE: Register for the model is pre-partitioned by deepspeed zero3 or zero3-offload.
             #       Pre-partitioned models aren't runnable as-is, but are needed to to be initialized
@@ -79,7 +98,13 @@ class QuantizationSimModel(V1QuantizationSimModel):
             #       Since quantsim constructor relies on torch.jit tracing which involves running
             #       forward pass of the model, here we register a temporary hook to make
             #       uninitialized but pre-partitioned models runnable.
-            super().__init__(model, *args, **kwargs)
+            super().__init__(model, dummy_input, quant_scheme,
+                             rounding_mode='nearest',
+                             default_output_bw=default_output_bw,
+                             default_param_bw=default_param_bw,
+                             in_place=in_place,
+                             config_file=config_file,
+                             default_data_type=default_data_type)
 
         # Quantization parameters are placed on cpu by default.
         # Move them to cuda device as necessary
