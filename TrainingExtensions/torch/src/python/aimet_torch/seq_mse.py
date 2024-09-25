@@ -524,7 +524,8 @@ class SequentialMse:
                         x: torch.Tensor,
                         xq: torch.Tensor,
                         w: torch.Tensor,
-                        wq: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+                        wq: torch.Tensor,
+                        use_bias: bool = True) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         Compute X^W^ and XW output activations.
 
@@ -533,18 +534,23 @@ class SequentialMse:
         :param xq: Inputs from QuantSim model
         :param w: FP32 weights
         :param wq: Quantized-dequantized weights
+        :param use_bias: True if module bias should be used
         :return: xqwq, xw
         """
         # pylint: disable=protected-access
         module = cls._get_original_module(quant_module)
+        if use_bias:
+            bias = module.bias
+        else:
+            bias = None
 
         if isinstance(module, torch.nn.Linear):
             xqwq = functional.linear(xq, wq, module.bias)
             xw = functional.linear(x, w, module.bias)
         elif isinstance(module, torch.nn.Conv2d):
-            xqwq = functional.conv2d(xq, wq, bias=module.bias, stride=module.stride, dilation=module.dilation,
+            xqwq = functional.conv2d(xq, wq, bias=bias, stride=module.stride, dilation=module.dilation,
                                      padding=module.padding, groups=module.groups)
-            xw = functional.conv2d(x, w, bias=module.bias, stride=module.stride, dilation=module.dilation,
+            xw = functional.conv2d(x, w, bias=bias, stride=module.stride, dilation=module.dilation,
                                    padding=module.padding, groups=module.groups)
 
             # [N, C, H, W] --> [N, H, W, C], so that loss can be computed across channel dimension.
