@@ -539,12 +539,12 @@ class SequentialMse:
         module = cls._get_original_module(quant_module)
 
         if isinstance(module, torch.nn.Linear):
-            xqwq = functional.linear(xq, wq, module.bias)
-            xw = functional.linear(x, w, module.bias)
+            xqwq = functional.linear(xq, wq)
+            xw = functional.linear(x, w)
         elif isinstance(module, torch.nn.Conv2d):
-            xqwq = functional.conv2d(xq, wq, bias=module.bias, stride=module.stride, dilation=module.dilation,
+            xqwq = functional.conv2d(xq, wq, stride=module.stride, dilation=module.dilation,
                                      padding=module.padding, groups=module.groups)
-            xw = functional.conv2d(x, w, bias=module.bias, stride=module.stride, dilation=module.dilation,
+            xw = functional.conv2d(x, w, stride=module.stride, dilation=module.dilation,
                                    padding=module.padding, groups=module.groups)
 
             # [N, C, H, W] --> [N, H, W, C], so that loss can be computed across channel dimension.
