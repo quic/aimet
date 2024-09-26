@@ -292,10 +292,7 @@ class SequentialMse(V1SequentialMse):
         Get candidate min and max tensors
         """
         cand_max = max_tensor / num_candidates * (candidate_idx + 1)
-        if min_tensor is None:
-            cand_min = -max_tensor
-        else:
-            cand_min = min_tensor / num_candidates * (candidate_idx + 1)
+        cand_min = min_tensor / num_candidates * (candidate_idx + 1)
         return cand_min, cand_max
 
     @classmethod
@@ -325,8 +322,7 @@ class SequentialMse(V1SequentialMse):
 
         block_losses = []
         for idx, x_block in enumerate(x_blocks):
-            xqwq, xw = cls.compute_outputs(quant_module, x_block, xq_blocks[idx], w_blocks[idx], wq_blocks[idx],
-                                           use_bias=(len(x_blocks) == 1))
+            xqwq, xw = cls.compute_outputs(quant_module, x_block, xq_blocks[idx], w_blocks[idx], wq_blocks[idx])
             block_losses.append(cls.compute_recon_loss(xqwq, xw, params))
         # Stack losses in the input channel dimension
         block_losses = torch.stack(block_losses, dim=-1)
@@ -375,8 +371,7 @@ class SequentialMse(V1SequentialMse):
         while best_indices.dim() < max_tensor.dim():
             best_indices = best_indices[..., None]
 
-        max_tensor = ((best_indices + 1) / params.num_candidates) * max_tensor
-        min_tensor = ((best_indices + 1) / params.num_candidates) * min_tensor
+        min_tensor, max_tensor = cls._get_candidate(best_indices, params.num_candidates, min_tensor, max_tensor)
 
         # Compute and freeze parameter encodings using best candidate
         cls.compute_param_encodings(quant_module.param_quantizers['weight'], min_tensor, max_tensor)
