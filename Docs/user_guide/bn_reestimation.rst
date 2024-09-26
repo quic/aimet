@@ -1,14 +1,14 @@
 .. _ug-bn-reestimation:
 
 
-======================
-AIMET Batch Normal Re-estimation
-======================
+##############################
+AIMET Batch Norm Re-estimation
+##############################
 
 Overview
 ========
 
-The Batch Normal (BN) re-estimation feature utilizes a small subset of training data to individually re-estimate the statistics of the BN layers in a model. These BN statistics are then used to adjust the quantization scale parameters of the preceeding Convolution or Linear layers. Effectively, the BN layers are folded.
+The Batch Norm (BN) re-estimation feature utilizes a small subset of training data to individually re-estimate the statistics of the BN layers in a model. These BN statistics are then used to adjust the quantization scale parameters of the preceeding Convolution or Linear layers. Effectively, the BN layers are folded.
 
 The BN re-estimation feature is applied after performing Quantization Aware Training (QAT) with Range Learning, with Per Channel Quantization (PCQ) enabled. It is important *not* to fold the BN layers before performing QAT. Fold the BN layers only after QAT and the re-estimation of the BN statistics are completed. See the Workflow section below for the exact sequence of steps.
 

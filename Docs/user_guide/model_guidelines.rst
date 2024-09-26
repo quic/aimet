@@ -8,7 +8,7 @@ To implement the Cross Layer Equalization API,  `aimet_torch.cross_layer_equaliz
 
 Certain model constructs prevent AIMET from creating and analyzing the computing graph. The following table lists these potential issues and workarounds.
 
-.. admonition NOTE::
+.. note::
 
     These restrictions are not applicable if you are using the **Primitive APIs**.
 

@@ -140,7 +140,7 @@ Before attempting quantization, ensure that models are defined according to mode
     PyTorch has two utilities to automate model complaince:
     
     - The Model Validator utility automates checking PyTorch model requirements
-    - he Model Preparer utility automates updating model definition to align with requirements
+    - The Model Preparer utility automates updating model definition to align with requirements
 
     In model prep and validation using PyTorch, we recommend the following flow:
 
@@ -153,7 +153,7 @@ Before attempting quantization, ensure that models are defined according to mode
 
 **2. Apply PTQ and AutoQuant**
 
-Apply PTQ techniques to adjust model parameters and make the model more robust to quantization. We recommend trying AutoQuant first. AutoQuant tries various other PTQ methods and finds the best combination of methods to apply. See :ref:`aimet-quantization-features`.
+Apply PTQ techniques to adjust model parameters and make the model more robust to quantization. We recommend trying AutoQuant first. AutoQuant tries various other PTQ methods and finds the best combination of methods to apply. See :ref:`aimet-quantization-features`_.
 
 
 **3. Use QAT**

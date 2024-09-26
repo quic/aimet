@@ -7,7 +7,7 @@ AIMET quantization aware training
 Overview
 ========
 
-When post-training quantizatio (PTQ) doesn't sufficiently reduce quantization error, the next step is to use quantization-aware training (QAT). QAT finds more accurate solutions than PTQ by modeling the quantization noise during training. This higher accuracy comes at the usual cost of neural network training, including longer training times and the need for labeled data and hyperparameter search.
+When post-training quantization (PTQ) doesn't sufficiently reduce quantization error, the next step is to use quantization-aware training (QAT). QAT finds better-optimized solutions than PTQ by fine-tuning the model parameters in the presence of quantization noise. This higher accuracy comes at the usual cost of neural network training, including longer training times and the need for labeled data and hyperparameter search.
 
 QAT workflow
 ============

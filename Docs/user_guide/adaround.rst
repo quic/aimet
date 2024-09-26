@@ -12,7 +12,7 @@ The Adaptive Rounding (AdaRound) feature uses a subset of the unlabeled training
 .. image:: ../images/adaround.png
     :width: 900px
 
-AdaRound optimizes a loss function using the unlabelled training data to decide whether to quantize a weight to the closer or further integer value. AdaRound quantization acieves accuracy closer to the FP32 model using low bit-width integer quantization.
+AdaRound optimizes a loss function using the unlabelled training data to decide whether to quantize a weight to the closer or further integer value. AdaRound quantization achieves accuracy closer to the FP32 model, while using low bit-width integer quantization.
 
 When creating a QuantizationSimModel using AdaRounded, use the QuantizationSimModel provided in the API to set and freeze parameter encodings before computing the encodings. Refer the code example in the AdaRound API.
 

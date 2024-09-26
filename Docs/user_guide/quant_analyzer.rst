@@ -8,7 +8,7 @@ AIMET QuantAnalyzer
 Overview
 ========
 
-The QuantAnalyzer performs several analyses to identify sensitive areas and hotspots in the model. These analyses are performed automatically. To use QuantAnalyzier, you pass in callbacks to perform forward passes and evaluations, and optionally a dataloader for MSE loss analysis.
+The QuantAnalyzer performs several analyses to identify sensitive areas and hotspots in the model. These analyses are performed automatically. To use QuantAnalyzer, you pass in callbacks to perform forward passes and evaluations, and optionally a dataloader for MSE loss analysis.
 
 For each analysis, QuantAnalyzer outputs JSON and/or HTML files containing data and plots for visualization.
 
@@ -25,7 +25,7 @@ To call the QuantAnalyzer API, you must provide the following:
 Other quantization-related settings are also provided in the call to analyze a model.
 See :doc:`PyTorch QuantAnalyzer API Docs<../api_docs/torch_quant_analyzer>` for more about how to call the QuantAnalyzer feature.
 
-.. admonition:: NOTE
+.. note::
    Typically on quantized runtimes, batch normalization (BN) layers are folded where possible. So that you don't have to call a separate API to do so, QuantAnalyzer automatically performs Batch Norm Folding before running its analyses.
 
 Detailed analysis descriptions
@@ -67,7 +67,7 @@ Per-layer statistics histogram
     Under the TF Enhanced quantization scheme, encoding min/max values for each quantizer are obtained by collecting a histogram of tensor values seen at that quantizer and deleting outliers.
 
     When this quantization scheme is selected, QuantAnalyzer outputs plots for each quantizer in the model, displaying the histogram of tensor values seen at that quantizer.
-    These plots are available as part of the `activations_pdf` and `weights_pdf folders`, containing a separate .html plot for each quantizer.
+    These plots are available as part of the `activations_pdf` and `weights_pdf` folders, containing a separate .html plot for each quantizer.
 
 Per layer mean-square-error (MSE) loss (optional)
     QuantAnalyzer can monitor each layer's output in the original FP32 model as well as the corresponding layer output in the quantized model and calculate the MSE loss between the two.

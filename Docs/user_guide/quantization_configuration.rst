@@ -73,20 +73,20 @@ Configure individual sections as described here.
 
     Outside the "ops" and "params" dictionaries, the following additional quantizer settings are available:
 
-    - strict_symmetric:
-        Optional.  If included, value is "True" or "False".
-        "True" causes quantizers configured in symmetric mode to use strict symmetric quantization.
-       "False", or omitting the parameter, causes quantizers configured in symmetric mode to not use strict symmetric quantization.
+        - strict_symmetric:
+            Optional.  If included, value is "True" or "False".
+            "True" causes quantizers configured in symmetric mode to use strict symmetric quantization.
+            "False", or omitting the parameter, causes quantizers configured in symmetric mode to not use strict symmetric quantization.
 
-    - unsigned_symmetric:
-        Optional.  If included, value is "True" or "False".
-        "True" causes quantizers configured in symmetric mode use unsigned symmetric quantization when available.
-       "False", or omitting the parameter, causes quantizers configured in symmetric mode to not use unsigned symmetric quantization.
+        - unsigned_symmetric:
+            Optional.  If included, value is "True" or "False".
+            "True" causes quantizers configured in symmetric mode use unsigned symmetric quantization when available.
+            "False", or omitting the parameter, causes quantizers configured in symmetric mode to not use unsigned symmetric quantization.
 
-    - per_channel_quantization:
-        Optional.  If included, value is "True" or "False".
-        "True" causes parameter quantizers to use per-channel quantization rather than per-tensor quantization.
-        When set to "False" or omitting the parameter, causes parameter quantizers to use per-tensor quantization.
+        - per_channel_quantization:
+            Optional.  If included, value is "True" or "False".
+            "True" causes parameter quantizers to use per-channel quantization rather than per-tensor quantization.
+            "False" or omitting the parameter, causes parameter quantizers to use per-tensor quantization.
 
 2. **params**:
 
@@ -147,10 +147,10 @@ Configure individual sections as described here.
                 Omitting the setting causes quantizers of this op type to fall back to the setting specified by the defaults section.
 
         - per_channel_quantization:
-            Optional.  If included, value is "True" or "False".
-           "True" sets parameter quantizers of this op type to use per-channel quantization rather than per-tensor quantization.
-            "False" sets parameter quantizers of this op type to use per-tensor quantization.
-            Omitting the setting causes parameter quantizers of this op type to fall back to the setting specified by the defaults section.
+                Optional.  If included, value is "True" or "False".
+                "True" sets parameter quantizers of this op type to use per-channel quantization rather than per-tensor quantization.
+                "False" sets parameter quantizers of this op type to use per-tensor quantization.
+                Omitting the setting causes parameter quantizers of this op type to fall back to the setting specified by the defaults section.
 
     For a particular op type, settings for particular parameter types can also be specified.
     For example, specifying settings for weight parameters of a Conv op type affects only Conv weights and not weights of Gemm op types.
