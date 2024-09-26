@@ -40,10 +40,12 @@
 
 import enum
 
+IMPORT_ERROR: ImportError = ImportError()
 
-ERROR_MESSAGE = 'Cannot import libpymo.' \
-                ' Please build libpymo and add artifact path to PYTHONPATH' \
-                ' to resolve this issue'
+def _error_message():
+    return f'libpymo import failed with the following error:\n\n{IMPORT_ERROR}\n\n' \
+           'Please check that libpymo has been built and is compatible with your ' \
+           'current environment.' \
 
 libpymo_classes = [
     'ModelOpDefParser',
@@ -91,15 +93,15 @@ def create_unavailable_class(class_name: str):
     class _MetaUnavailableClass(type):
         @classmethod
         def __getattr__(mcs, name):
-            raise RuntimeError(f"Unable to access attribute {name} of class {class_name}: {ERROR_MESSAGE}")
+            raise RuntimeError(f"Unable to access attribute {name} of class {class_name}: {_error_message()}")
 
 
     class _UnavailableClass(metaclass=_MetaUnavailableClass):
         def __init__(self, *args, **kwargs):
-            raise RuntimeError(f"Unable to initialize class {class_name}: {ERROR_MESSAGE}")
+            raise RuntimeError(f"Unable to initialize class {class_name}: {_error_message()}")
 
         def __getattr__(self, name):
-            raise RuntimeError(f"Unable to access attribute {name} of class {class_name}: {ERROR_MESSAGE}")
+            raise RuntimeError(f"Unable to access attribute {name} of class {class_name}: {_error_message()}")
 
 
     return type(class_name, (_UnavailableClass,), {})
@@ -114,7 +116,7 @@ def create_unavailable_function(method_name: str):
     Create unavailable function to lazily throw error when user tries to use the function.
     """
     def unavailable_function(*args, **kwargs):
-        raise RuntimeError(f"Unable to run function {method_name}: {ERROR_MESSAGE}")
+        raise RuntimeError(f"Unable to run function {method_name}: {_error_message()}")
 
     return unavailable_function
 
