@@ -47,6 +47,7 @@ from aimet_common.defs import QuantScheme
 from aimet_torch.utils import create_fake_data_loader
 
 from aimet_torch.v2.quantsim import QuantizationSimModel
+from aimet_torch.v2.quantsim.config_utils import set_grouped_blockwise_quantization_for_weights
 from aimet_torch.v2.nn import QuantizationMixin
 from aimet_torch.v2.quantization.affine import QuantizeDequantize
 from aimet_torch.v2.seq_mse import  apply_seq_mse, get_candidates, optimize_module, SeqMseParams, SequentialMse
@@ -152,21 +153,20 @@ class TestSeqMse:
             assert list(cand_max.size())[0] == linear.out_features
             assert list(cand_min.size())[0] == linear.out_features
 
-    @pytest.mark.parametrize("enable_pcq", [True, False])
+    @pytest.mark.parametrize("quantizer_shape, block_size", [[[], None],
+                                                             [[128, 1], None],
+                                                             [[128, 8], [-1, -1]]])
     @pytest.mark.parametrize("param_bw", [4, 16])
     @pytest.mark.parametrize("loss_fn", ['mse', 'l1', 'sqnr'])
     @pytest.mark.parametrize("qparam_requires_grad", [True, False])
-    def test_optimize_module_linear(self, enable_pcq, param_bw, loss_fn, qparam_requires_grad):
+    def test_optimize_module_linear(self, quantizer_shape, block_size, param_bw, loss_fn, qparam_requires_grad):
         """ test optimize module for linear """
         torch.manual_seed(0)
         linear = torch.nn.Linear(64, 128)
         wrapper = QuantizationMixin.from_module(linear)
-        if enable_pcq:
-            quantizer_shape = [linear.weight.shape[0], 1]
-        else:
-            quantizer_shape = []
 
-        wrapper.param_quantizers['weight'] = QuantizeDequantize(shape=quantizer_shape, bitwidth=param_bw, symmetric=True)
+        wrapper.param_quantizers['weight'] = QuantizeDequantize(shape=quantizer_shape, bitwidth=param_bw,
+                                                                symmetric=True, block_size=block_size)
         wrapper.param_quantizers['weight'].min.requires_grad = qparam_requires_grad
         wrapper.param_quantizers['weight'].max.requires_grad = qparam_requires_grad
 
@@ -187,23 +187,20 @@ class TestSeqMse:
             assert not torch.allclose(before.min, after.min)
             assert not torch.allclose(before.max, after.max)
 
-    @pytest.mark.parametrize("enable_pcq", [True, False])
+    @pytest.mark.parametrize("quantizer_shape, block_size", [[[1, ], None],
+                                                             [[32, 1, 1, 1], None],
+                                                             [[32, 3, 1, 1], [1, 2, -1, -1]]])
     @pytest.mark.parametrize("param_bw", [4, 16])
     @pytest.mark.parametrize("loss_fn", ['mse', 'l1', 'sqnr'])
-    def test_optimize_module_conv(self, enable_pcq, param_bw, loss_fn):
+    def test_optimize_module_conv(self, quantizer_shape, block_size, param_bw, loss_fn):
         """ test optimize module for linear """
         torch.manual_seed(0)
-        conv = torch.nn.Conv2d(3, 32, 3)
+        conv = torch.nn.Conv2d(6, 32, 3)
         wrapper = QuantizationMixin.from_module(conv)
-        if enable_pcq:
-            quantizer_shape = [conv.weight.shape[0], 1, 1, 1]
-        else:
-            quantizer_shape = [1, ]
-
         wrapper.param_quantizers['weight'] = QuantizeDequantize(shape=quantizer_shape, bitwidth=param_bw,
-                                                                symmetric=True)
+                                                                symmetric=True, block_size=block_size)
 
-        xq = torch.randn(32, 1, 3, 10, 10)
+        xq = torch.randn(32, 1, 6, 10, 10)
         with wrapper.param_quantizers['weight'].compute_encodings():
             _ = wrapper.param_quantizers['weight'](wrapper.weight.data)
         before = wrapper.param_quantizers['weight'].get_encoding()
@@ -322,3 +319,18 @@ class TestSeqMse:
         SequentialMse.compute_param_encodings(qtzr, x_min, x_max)
         assert torch.all(torch.isclose(qtzr.get_max(), x_max) |
                          torch.isclose(qtzr.get_min(), x_min))
+
+    def test_handle_grouped_block_quantizers(self):
+        torch.manual_seed(0)
+        model = Net().eval()
+        dummy_input = torch.randn(1, 1, 28, 28)
+        sim = QuantizationSimModel(model, dummy_input, default_param_bw=4)
+        set_grouped_blockwise_quantization_for_weights(sim, lambda m: m != sim.model.conv1, 4, True, 8, 4)
+        sim.compute_encodings(lambda m, _: m(dummy_input), None)
+        out = sim.model(dummy_input)
+        with SequentialMse._handle_grouped_block_quantizers(sim):
+            out_2 = sim.model(dummy_input)
+        out_3 = sim.model(dummy_input)
+
+        assert torch.equal(out, out_3)
+        assert not torch.equal(out, out_2)
