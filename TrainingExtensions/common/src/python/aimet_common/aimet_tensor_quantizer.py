@@ -41,10 +41,10 @@
 # pylint: disable=unused-wildcard-import, wildcard-import, protected-access
 try:
     from aimet_common.AimetTensorQuantizer import *
-except ImportError:
-    ERROR_MESSAGE = "Cannot import AimetTensorQuantizer." \
-                    " Please build AimetTensorQuantizer and add artifact path to PYTHONPATH" \
-                    " to resolve this issue"
+except ImportError as err:
+    ERROR_MESSAGE = f"AimetTensorQuantizer import failed with the following error:\n\n{err}\n\n" \
+                    "Please check that AimetTensorQuantizer has been built and is compatible with your " \
+                    "current environment."
 
 
     class _MetaUnavailableClass(type):
