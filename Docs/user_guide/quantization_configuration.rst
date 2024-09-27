@@ -55,7 +55,9 @@ Configure individual sections as described here.
 
         - is_symmetric:
             Optional. If included, value is "True" or "False".
+
             "True" places all activation quantizers in symmetric mode by default.
+
             "False", or omitting the parameter, sets all activation quantizers to asymmetric mode by default.
 
     The "params" dictionary holds settings that apply to all parameter quantizers in the model.
@@ -63,29 +65,39 @@ Configure individual sections as described here.
 
         - is_quantized:
             Optional.  If included, value is "True" or "False".
+
             "True" turns on all parameter quantizers by default.
+
             "False", or omitting the parameter, disables all parameter quantizers by default.
 
         - is_symmetric:
             Optional.  If included, value is "True" or "False".
+
             "True" places all parameter quantizers in symmetric mode by default.
+
             "False", or omitting the parameter, sets all parameter quantizers to asymmetric mode by default.
 
     Outside the "ops" and "params" dictionaries, the following additional quantizer settings are available:
 
         - strict_symmetric:
             Optional.  If included, value is "True" or "False".
+
             "True" causes quantizers configured in symmetric mode to use strict symmetric quantization.
+
             "False", or omitting the parameter, causes quantizers configured in symmetric mode to not use strict symmetric quantization.
 
         - unsigned_symmetric:
             Optional.  If included, value is "True" or "False".
+
             "True" causes quantizers configured in symmetric mode use unsigned symmetric quantization when available.
+
             "False", or omitting the parameter, causes quantizers configured in symmetric mode to not use unsigned symmetric quantization.
 
         - per_channel_quantization:
             Optional.  If included, value is "True" or "False".
+
             "True" causes parameter quantizers to use per-channel quantization rather than per-tensor quantization.
+
             "False" or omitting the parameter, causes parameter quantizers to use per-tensor quantization.
 
 2. **params**:
@@ -107,14 +119,20 @@ Configure individual sections as described here.
 
         - is_quantized:
             Optional.  If included, value is "True" or "False".
+
             "True" turns on all parameter quantizers of that type.
+
             "False" disables all parameter quantizers of that type.
+
             Omitting the setting causes the parameter to use the setting specified by the defaults section.
 
         - is_symmetric:
             Optional.  If included, value is "True" or "False".
+
             "True" places all parameter quantizers of that type in symmetric mode.
+
             "False" places all parameter quantizers of that type in asymmetric mode.
+
             Omitting the setting causes the parameter to use the setting specified by the defaults section.
 
 3. **op_type**:
@@ -131,25 +149,36 @@ Configure individual sections as described here.
 
         - is_input_quantized:
             Optional. If included, must be "True".
+
             Including this setting turns on input quantization for all ops of this op type.
+
             Omitting the setting keeps input quantization disabled for all ops of this op type.
 
         - is_output_quantized:
             Optional.  If included, value is "True" or "False".
+
             "True" turns on output quantization for all ops of this op type.
+
             "False" disables output quantization for all ops of this op type.
+
             Omitting the setting causes output quantizers of this op type to fall back to the setting specified by the defaults section.
 
         - is_symmetric:
                 Optional.  If included, value is "True" or "False".
+
                 "True" places all quantizers of this op type in symmetric mode.
+
                 "False" places all quantizers of this op type in asymmetric mode.
+
                 Omitting the setting causes quantizers of this op type to fall back to the setting specified by the defaults section.
 
         - per_channel_quantization:
                 Optional.  If included, value is "True" or "False".
+
                 "True" sets parameter quantizers of this op type to use per-channel quantization rather than per-tensor quantization.
+
                 "False" sets parameter quantizers of this op type to use per-tensor quantization.
+                
                 Omitting the setting causes parameter quantizers of this op type to fall back to the setting specified by the defaults section.
 
     For a particular op type, settings for particular parameter types can also be specified.
