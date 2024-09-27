@@ -702,28 +702,23 @@ class QuantizationSimModel:
                 enc_dict = None
         return enc_dict
 
+    def _get_encodings(self, quantizer_names) -> Dict:
+        encoding_dict = {}
+        for name in quantizer_names:
+            encoding = self.qc_quantize_op_dict[name].export_encodings(encoding_version)
+            if encoding is None:
+                continue
+            encoding_dict[name] = encoding
+        return encoding_dict
+
     def _export_encodings(self, encoding_file_path):
         """
         Export encodings to json and yaml file
 
         :param encoding_file_path: path to save the encoding files
         """
-
-        def update_encoding_dict_entry(encoding_dict: Dict, op_name: str):
-            qc_quantize_op = self.qc_quantize_op_dict[op_name]
-            encoding_dict[op_name] = []
-            for encoding in qc_quantize_op.encodings:
-                encoding_dict[op_name].append(QuantizationSimModel._create_encoding_dict(encoding, qc_quantize_op))
-
-        param_encodings = {}
-        for name in self.param_names:
-            if self.qc_quantize_op_dict[name].enabled:
-                update_encoding_dict_entry(param_encodings, name)
-
-        activation_encodings = {}
-        for name in self.activation_names:
-            if self.qc_quantize_op_dict[name].enabled:
-                update_encoding_dict_entry(activation_encodings, name)
+        param_encodings = self._get_encodings(self.param_names)
+        activation_encodings = self._get_encodings(self.activation_names)
 
         encodings_dict = {'version': encoding_version,
                           'activation_encodings': activation_encodings,

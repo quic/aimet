@@ -335,16 +335,7 @@ class Adaround:
         :param quant_sim: QunatSim that contains the model and Adaround tensor quantizers
         """
         # pylint: disable=protected-access
-        def update_encoding_dict_entry(encoding_dict: Dict, op_name: str):
-            qc_quantize_op = quant_sim.qc_quantize_op_dict[op_name]
-            encoding_dict[op_name] = []
-            for encoding in qc_quantize_op.encodings:
-                encoding_dict[op_name].append(QuantizationSimModel._create_encoding_dict(encoding, qc_quantize_op))
-
-        param_encodings = {}
-        for name in quant_sim.param_names:
-            if quant_sim.qc_quantize_op_dict[name].enabled:
-                update_encoding_dict_entry(param_encodings, name)
+        param_encodings = quant_sim._get_encodings(quant_sim.param_names)
 
         # export encodings to JSON file
         os.makedirs(os.path.abspath(path), exist_ok=True)

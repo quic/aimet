@@ -326,6 +326,10 @@ class QcQuantizeOp:
                 tensor_quantizer.isEncodingValid = False
 
         else:
+            assert isinstance(encoding, (list, tuple))
+            assert len(encoding) == len(self._tensor_quantizer)
+            for tensor_quantizer in self._tensor_quantizer:
+                tensor_quantizer.isEncodingValid = True
             encodings = encoding
         # pylint: disable=attribute-defined-outside-init
         self._encoding = encodings
@@ -352,13 +356,9 @@ class QcQuantizeOp:
         reset the stats of tensor quantizer
         """
         if not self._is_encoding_frozen:
-            encodings = []
             for tensor_quantizer in self._tensor_quantizer:
-                encoding = libpymo.TfEncoding()
-                encoding.bw = self.bitwidth
-                encodings.append(encoding)
                 tensor_quantizer.resetEncodingStats()
-            self.encodings = encodings
+            self.encodings = None
 
     def set_bitwidth(self, bitwidth: int):
         """
@@ -417,3 +417,54 @@ class QcQuantizeOp:
             histogram.append(tensor_quantizer.getStatsHistogram())
 
         return histogram
+
+    def is_initialized(self) -> bool:
+        """
+        Returns True if all quantizers have been initialized, False otherwise
+        """
+        if self.data_type == QuantizationDataType.float:
+            # Fp16 quantizers do not need to be initialized
+            return True
+
+        if all(tq.isEncodingValid for tq in self._tensor_quantizer):
+            return True
+
+        return False
+
+    def export_encodings(self, encoding_version: str = "0.6.1"):
+        """
+        Exports the quantizer's encodings in the selected format.
+
+        :param encoding_version: Version string indicated the encoding export format.
+        """
+        if encoding_version == '0.6.1':
+            return self._export_legacy_encodings()
+
+        raise RuntimeError(f"Unsupported encoding export version: {encoding_version}")
+
+    def _export_legacy_encodings(self) -> Union[List, None]:
+        """
+        Create encoding dictionary from encoding object
+
+        :return: List of encoding dictionaries in 0.6.1 encoding format
+        """
+        if not self.enabled or not self.is_initialized():
+            return None
+
+        if self.data_type == QuantizationDataType.float:
+            return [{'bitwidth': self.bitwidth, 'dtype': "float"}]
+
+        if self.data_type == QuantizationDataType.int:
+            encodings = []
+            for encoding in self.encodings:
+                enc_dict = dict(min=encoding.min,
+                                max=encoding.max,
+                                scale=encoding.delta,
+                                offset=int(encoding.offset),
+                                bitwidth=encoding.bw,
+                                is_symmetric=str(self.use_symmetric_encodings),
+                                dtype="int")
+                encodings.append(enc_dict)
+            return encodings
+
+        raise RuntimeError(f"Exporting data type {self.data_type} not supported")
