@@ -264,7 +264,7 @@ def set_blockwise_quantization_for_weights(sim: QuantizationSimModel, arg, bitwi
     """
     Set weight parameter quantizers of modules to blockwise.
 
-    :param sim: Quantsim to set activation quantizers for
+    :param sim: Quantsim to set weight quantizers for
     :param arg: Argument determining which modules to set. This can consist of either:
 
         1. A list of torch.nn.Module types, in which case all modules whose type is in the list will be set
@@ -375,7 +375,7 @@ def set_grouped_blockwise_quantization_for_weights(sim: QuantizationSimModel, ar
     """
     Set weight parameter quantizers of modules to grouped blockwise.
 
-    :param sim: Quantsim to set activation quantizers for
+    :param sim: Quantsim to set weight quantizers for
     :param arg: Argument determining which modules to set. This can consist of either:
 
         1. A list of torch.nn.Module types, in which case all modules whose type is in the list will be set

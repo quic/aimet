@@ -1045,9 +1045,9 @@ def set_blockwise_quantization_for_weights(sim: QuantizationSimModel,
                                            block_size: int,
                                            strict: bool = False):
     """
-    Set weight parameter quantizers of modules to blockwise.
+    Set weight quantizers for the given operator types to use blockwise affine quantization.
 
-    :param sim: Quantsim to set activation quantizers for
+    :param sim: Quantsim object to configure weight quantizers for
     :param op_types: Operator types for which to enable blockwise weight quantizaiton
     :param bitwidth: Bitwidth for quantization
     :param symmetric: True if quantization is symmetric, False otherwise
@@ -1061,7 +1061,7 @@ def set_blockwise_quantization_for_weights(sim: QuantizationSimModel,
         >>> # Assume 'sim' is a QuantizationSimModel object
         >>> # Allows setting of all Linear and Conv weight quantizers to block_size 64 in the input_channels dimension:
         >>> set_blockwise_quantization_for_weights(sim=sim,
-        ...                                        arg=("Gemm", "MatMul", "Conv"),
+        ...                                        op_types=("Gemm", "MatMul", "Conv"),
         ...                                        bitwidth=4,
         ...                                        symmetric=True,
         ...                                        block_size=64)
