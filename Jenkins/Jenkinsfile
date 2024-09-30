@@ -5,7 +5,7 @@ pipeline {
         string(name: 'BUILD_LABEL_CPU', defaultValue: 'docker-build-aimet-pr-cpu', description: 'Jenkins node host name or label for CPU variants')
         string(name: 'BUILD_TIMEOUT', defaultValue: '3', description: 'Build timeout in hours')
         string(name: 'USE_LINARO', defaultValue: '-l', description: 'Use pre-built Linaro images, if available.')
-        string(name: 'AIMET_PREBUILT_DOCKER_IMAGE_URL', defaultValue: '', description: 'Use pre-built docker image from URL, if available.')
+        string(name: 'PREBUILT_DOCKER_IMAGE_URL', defaultValue: '', description: 'Use pre-built docker image from URL, if available.')
     }
     agent { label "${params.BUILD_LABEL_CPU}" }
     options {
@@ -90,10 +90,10 @@ pipeline {
                                     }
                                     if ("${env.QCInternalValidation}" == "true") {
                                         withCredentials([usernameColonPassword(credentialsId: 'neoci-pat', variable: 'USERPASS')]) {
-                                            sh "AIMET_VARIANT=\"tf-gpu\" AIMET_PREBUILT_DOCKER_IMAGE_URL=\"${params.AIMET_PREBUILT_DOCKER_IMAGE_URL}\" bash -l -c \"cd ${REPO_NAME} && ${env.DEPENDENCY_DATA_PATH}/commit_check/commit-checks.sh -e AIMET_VARIANT ${using_linaro} AIMET_PREBUILT_DOCKER_IMAGE_URL\""
+                                            sh "AIMET_VARIANT=\"tf-gpu\" AIMET_PREBUILT_DOCKER_IMAGE_URL=\"${env.AIMET_PREBUILT_DOCKER_IMAGE_URL}\" PREBUILT_DOCKER_IMAGE_URL=\"${params.PREBUILT_DOCKER_IMAGE_URL}\" bash -l -c \"cd ${REPO_NAME} && ${env.DEPENDENCY_DATA_PATH}/commit_check/commit-checks.sh -e AIMET_VARIANT ${using_linaro} AIMET_PREBUILT_DOCKER_IMAGE_URL PREBUILT_DOCKER_IMAGE_URL\""
                                         }
                                     } else {
-                                        sh "AIMET_VARIANT=\"tf-gpu\" AIMET_PREBUILT_DOCKER_IMAGE_URL=\"${params.AIMET_PREBUILT_DOCKER_IMAGE_URL}\" bash -l -c \"cd ${REPO_NAME} && ${env.DEPENDENCY_DATA_PATH}/commit_check/commit-checks.sh -e AIMET_VARIANT ${using_linaro} AIMET_PREBUILT_DOCKER_IMAGE_URL\""
+                                        sh "AIMET_VARIANT=\"tf-gpu\" AIMET_PREBUILT_DOCKER_IMAGE_URL=\"${env.AIMET_PREBUILT_DOCKER_IMAGE_URL}\" PREBUILT_DOCKER_IMAGE_URL=\"${params.PREBUILT_DOCKER_IMAGE_URL}\" bash -l -c \"cd ${REPO_NAME} && ${env.DEPENDENCY_DATA_PATH}/commit_check/commit-checks.sh -e AIMET_VARIANT ${using_linaro} AIMET_PREBUILT_DOCKER_IMAGE_URL PREBUILT_DOCKER_IMAGE_URL\""
                                     }
                                 }
                                 sh "bash -l -c \"rm -rf commit_checks_repo\""
@@ -392,8 +392,8 @@ pipeline {
                                 steps {
                                     echo "*** Running Docker stage for ${AIMET_VARIANT} variant on ${env.NODE_NAME} in workspace ${env.WORKSPACE_ROOT} ***"
                                     script {
-                                        if (params.AIMET_PREBUILT_DOCKER_IMAGE_URL && ! pullRequest.files.any { f -> f.getFilename().contains('Dockerfile') }) {
-                                            DOCKER_IMAGE_FULL_URL = "${params.AIMET_PREBUILT_DOCKER_IMAGE_URL}/${env.DOCKER_IMAGE}"
+                                        if (env.AIMET_PREBUILT_DOCKER_IMAGE_URL && ! pullRequest.files.any { f -> f.getFilename().contains('Dockerfile') }) {
+                                            DOCKER_IMAGE_FULL_URL = "${env.AIMET_PREBUILT_DOCKER_IMAGE_URL}/${env.DOCKER_IMAGE}"
                                             sh "docker pull ${DOCKER_IMAGE_FULL_URL} && docker tag ${DOCKER_IMAGE_FULL_URL} ${env.DOCKER_IMAGE}"
                                         } else {
                                             env.DOCKER_IMAGE = "${env.DOCKER_IMAGE}.${CHANGE_ID}"
@@ -515,7 +515,7 @@ def runStage(aimet_variant, options) {
             using_linaro=""
         }
         sh """
-            AIMET_VARIANT=${aimet_variant} bash -l -c "cd ${REPO_NAME} && ./buildntest.sh -e AIMET_VARIANT ${options} ${using_linaro} ${params.AIMET_PREBUILT_DOCKER_IMAGE_URL}"
+            AIMET_VARIANT=${aimet_variant} AIMET_PREBUILT_DOCKER_IMAGE_URL=${env.AIMET_PREBUILT_DOCKER_IMAGE_URL} PREBUILT_DOCKER_IMAGE_URL=${params.PREBUILT_DOCKER_IMAGE_URL} bash -l -c "cd ${REPO_NAME} && ./buildntest.sh -e AIMET_VARIANT ${options} ${using_linaro} AIMET_PREBUILT_DOCKER_IMAGE_URL PREBUILT_DOCKER_IMAGE_URL"
         """
     }
 }

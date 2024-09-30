@@ -168,7 +168,9 @@ fi
 
 
 # Set the root URL that hosts the pre-built development docker image
-if [ -n "$AIMET_PREBUILT_DOCKER_IMAGE_URL" ]; then
+if [ -n "$PREBUILT_DOCKER_IMAGE_URL" ]; then
+    prebuilt_docker_image_url=${PREBUILT_DOCKER_IMAGE_URL}
+elif [ -n "$AIMET_PREBUILT_DOCKER_IMAGE_URL" ]; then
     # Use a custom source if one is provided
     prebuilt_docker_image_url=${AIMET_PREBUILT_DOCKER_IMAGE_URL}
 else
