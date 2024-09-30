@@ -68,13 +68,13 @@ For other AIMET variants, install the *latest* version from the .whl files hoste
 .. parsed-literal::
 
     # Pytorch 2.1 with CUDA 12.x
-    python3 -m pip install |download_url|\ |version|/aimet_torch-\ |version|.cu121\ |whl_suffix|
+    python3 -m pip install |download_url|\ |version|/aimet_torch-\ |version|.cu121\ |whl_suffix| -f |torch_pkg_url|
 
     # Pytorch 2.1 CPU only
-    python3 -m pip install |download_url|\ |version|/aimet_torch-\ |version|.cpu\ |whl_suffix|
+    python3 -m pip install |download_url|\ |version|/aimet_torch-\ |version|.cpu\ |whl_suffix| -f |torch_pkg_url|
     
     # Pytorch 1.13 with CUDA 11.x
-    python3 -m pip install |download_url|\ |version|/aimet_torch-\ |version|.cu117\ |whl_suffix|
+    python3 -m pip install |download_url|\ |version|/aimet_torch-\ |version|.cu117\ |whl_suffix| -f |torch_pkg_url|
 
 
 **TensorFlow**
@@ -103,6 +103,7 @@ For older versions, please browse the releases at https://github.com/quic/aimet/
 
 .. |whl_suffix| replace:: -cp310-cp310-manylinux_2_34_x86_64.whl
 .. |download_url| replace:: \https://github.com/quic/aimet/releases/download/
+.. |torch_pkg_url| replace:: \https://download.pytorch.org/whl/torch_stable.html
 
 System Requirements
 ~~~~~~~~~~~~~~~~~~~
