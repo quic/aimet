@@ -179,19 +179,24 @@ class BatchNormFold(BatchNormFoldV1):
             gamma = bn.weight
             sigma = torch.sqrt(bn.running_var + bn.eps)
             result = gamma / sigma
-            new_encoding_min = torch.zeros_like(weight_quantizer.min)
-            new_encoding_max = torch.zeros_like(weight_quantizer.max)
 
-            for i, elem in enumerate(weight_quantizer.min):
+            # flatten min/max to handle ConvTranspose shape
+            flat_min = torch.flatten(weight_quantizer.min)
+            flat_max = torch.flatten(weight_quantizer.max)
+
+            new_encoding_min = torch.zeros_like(flat_min)
+            new_encoding_max = torch.zeros_like(flat_max)
+
+            for i in range(torch.numel(flat_min)):
                 if result[i] >= 0:
-                    new_encoding_max[i] = weight_quantizer.max[i] * result[i]
-                    new_encoding_min[i] = elem * result[i]
+                    new_encoding_max[i] = flat_max[i] * result[i]
+                    new_encoding_min[i] = flat_min[i] * result[i]
                 else:
-                    new_encoding_max[i] = weight_quantizer.min[i] * result[i]
-                    new_encoding_min[i] = weight_quantizer.max[i] * result[i]
+                    new_encoding_max[i] = flat_min[i] * result[i]
+                    new_encoding_min[i] = flat_max[i] * result[i]
 
-        weight_quantizer.min.copy_(new_encoding_min)
-        weight_quantizer.max.copy_(new_encoding_max)
+            weight_quantizer.min.copy_(new_encoding_min.view_as(weight_quantizer.min))
+            weight_quantizer.max.copy_(new_encoding_max.view_as(weight_quantizer.max))
 
         # Copy batchnorm's output quantizers to conv output quantizers
         for i, (conv_output_quantizer, bn_output_quantizer) in\

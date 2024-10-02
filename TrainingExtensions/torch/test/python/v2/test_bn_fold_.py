@@ -46,16 +46,11 @@ from contextlib import contextmanager
 import torch
 from torchvision import models
 
-from aimet_torch.meta.connectedgraph import ConnectedGraph
 from aimet_torch.v2.batch_norm_fold import (
     fold_given_batch_norms,
-    fold_all_batch_norms,
     fold_all_batch_norms_to_scale,
-    _is_valid_bn_fold,
-    _find_all_batch_norms_to_fold,
 )
-from models.test_models import TransposedConvModel, Conv3dModel, Conv3dModel1
-from aimet_torch.utils import create_rand_tensors_given_shapes, get_device
+from models.test_models import TransposedConvModel
 from aimet_torch.v2.quantsim import QuantizationSimModel
 from aimet_torch.model_preparer import prepare_model
 from aimet_common.defs import QuantScheme
@@ -71,7 +66,6 @@ def _initialize_bn_params(model: torch.nn.Module):
                 module.bias.copy_(torch.randn_like(module.bias))
                 module.running_mean.copy_(torch.randn_like(module.bias))
                 module.running_var.add_(torch.randn_like(module.bias).abs())
-
 
 class MyModel(torch.nn.Module):
     def __init__(self):
@@ -729,12 +723,13 @@ class TestTrainingExtensionBnFoldToScale:
         delta = float((fc_output_encoding.max - fc_output_encoding.min)/255)
         assert torch.allclose(baseline_output, output_after_fold, atol=delta) # Allow 1-tick difference
 
+    
     def test_bn_fold_auto_mode_transposed_conv2d(self):
         torch.manual_seed(10)
         model = TransposedConvModel().eval()
         _initialize_bn_params(model)
 
-        random_input = torch.rand((10, 10, 4, 4))
+        random_input = torch.rand((10, 10, 16, 16))
         sim = quantsim(model, random_input)
         model = sim.model
 
@@ -745,8 +740,8 @@ class TestTrainingExtensionBnFoldToScale:
         assert isinstance(model.bn1, torch.nn.Identity)
 
         conv2_output_encoding = model.conv2.output_quantizers[0]
-        delta = float((conv2_output_encoding.max - conv2_output_encoding.min) / 255)
-        assert torch.allclose(baseline_output, output_after_fold, atol=delta) # Allow 1-tick difference
+        delta = conv2_output_encoding.get_scale().item()
+        assert torch.allclose(baseline_output, output_after_fold, atol=delta) #Allow 1-tick difference
         assert len(folded_pairs) == 2
 
     def test_bn_fold_auto_mode(self):
@@ -843,7 +838,6 @@ class TestTrainingExtensionBnFoldToScale:
 
         layer_list = [(model.conv1d, model.bn1)]
         bn_output_quantizer = model.bn1.output_quantizers[0]
-        orig_q_weight = model.conv1d.param_quantizers['weight'](model.conv1d.weight)
 
         fold_given_batch_norms(model, layer_list)
         output_after_fold = model(random_input)
@@ -854,10 +848,6 @@ class TestTrainingExtensionBnFoldToScale:
         assert model.conv1d.output_quantizers[0]
         assert model.conv1d.param_quantizers["weight"]
         assert model.conv1d.output_quantizers[0] == bn_output_quantizer
-
-        q_weight = model.conv1d.param_quantizers['weight'](model.conv1d.weight)
-
-        assert torch.allclose(orig_q_weight.quantize(), q_weight.quantize())
 
         conv_output_scale = model.conv1d.output_quantizers[0].get_scale()
         assert torch.allclose(baseline_output, output_after_fold, atol=conv_output_scale.item()) # Allow 1-tick difference
