@@ -104,7 +104,7 @@ The following pre-requisites apply to all variants. The GPU variants may need ad
     python3 -m pip install |download_url|\ |version|/aimet_onnx-\ |version|.cu117\ |whl_suffix| -f |torch_pkg_url|
 
     # ONNX 1.16 CPU
-    python3 -m pip install |download_url|\ |version|/aimet_onnx-\ |version|.cpu\ |whl_suffix|
+    python3 -m pip install |download_url|\ |version|/aimet_onnx-\ |version|.cpu\ |whl_suffix| -f |torch_pkg_url|
 
 
 For older versions, please browse the releases at https://github.com/quic/aimet/releases and follow the documentation corresponding to that release to select and install the appropriate package.
