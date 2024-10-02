@@ -54,7 +54,7 @@ import torch.utils.data as torch_data
 import aimet_common
 from aimet_torch import bias_correction
 from aimet_torch.cross_layer_equalization import equalize_model
-from aimet_torch.quantsim import QuantParams, QuantizationSimModel
+from aimet_torch.v1.quantsim import QuantParams, QuantizationSimModel
 
 # imports for data pipelines
 from Examples.common import image_net_config

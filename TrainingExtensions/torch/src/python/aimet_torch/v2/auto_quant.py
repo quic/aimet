@@ -41,7 +41,7 @@ import itertools
 import torch
 
 import aimet_torch.v2.quantization as Q
-from aimet_torch.auto_quant import AutoQuantBase, _logger, cache # pylint: disable=unused-import
+from aimet_torch.v1.auto_quant import AutoQuantBase, _logger, cache # pylint: disable=unused-import
 from aimet_torch.v2.adaround import Adaround, AdaroundParameters
 from aimet_torch.v2.quantsim import QuantizationSimModel
 from aimet_torch.v2.nn import BaseQuantizationMixin

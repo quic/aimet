@@ -52,7 +52,7 @@ from aimet_torch import utils
 from aimet_torch.tensor_quantizer import TensorQuantizer, StaticGridTensorQuantizer
 from aimet_torch.qc_quantize_op import QcQuantizeWrapper
 from aimet_torch.qc_quantize_recurrent import QcQuantizeRecurrent
-from aimet_torch.quantsim import QuantizationSimModel
+from aimet_torch.v1.quantsim import QuantizationSimModel
 from aimet_torch.batch_norm_fold import fold_all_batch_norms
 
 _logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.QuantAnalyzer)

@@ -34,29 +34,29 @@ Top-level API
     learn more about the differences between :mod:`aimet_torch` and :mod:`aimet_torch.v2`, please visit the
     :ref:`QuantSim v2 Overview<ug-aimet-torch-v2-overview>`.
 
-.. autoclass:: aimet_torch.quantsim.QuantizationSimModel
+.. autoclass:: aimet_torch.v1.quantsim.QuantizationSimModel
 
 |
 
 **The following API can be used to Compute Encodings for Model**
 
-.. automethod:: aimet_torch.quantsim.QuantizationSimModel.compute_encodings
+.. automethod:: aimet_torch.v1.quantsim.QuantizationSimModel.compute_encodings
 
 |
 
 **The following APIs can be used to save and restore the quantized model**
 
-.. automethod:: aimet_torch.quantsim.save_checkpoint
+.. automethod:: aimet_torch.v1.quantsim.save_checkpoint
 
 |
 
-.. automethod:: aimet_torch.quantsim.load_checkpoint
+.. automethod:: aimet_torch.v1.quantsim.load_checkpoint
 
 |
 
 **The following API can be used to Export the Model to target**
 
-.. automethod:: aimet_torch.quantsim.QuantizationSimModel.export
+.. automethod:: aimet_torch.v1.quantsim.QuantizationSimModel.export
 
 |
 

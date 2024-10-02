@@ -56,14 +56,14 @@ import aimet_common
 from aimet_common.utils import AimetLogger
 from aimet_torch import onnx_utils
 from aimet_torch import utils
-import aimet_torch.nn.modules.custom as aimet_modules
+import aimet_torch.v1.nn.modules.custom as aimet_modules
 from aimet_torch.model_preparer import prepare_model
 from ..models_.test_models import TwoLayerBidirectionalLSTMModel, SingleLayerRNNModel, \
     ModelWithTwoInputs, SimpleConditional, RoiModel, InputOutputDictModel, Conv3dModel
 from ..models_.models_to_test import ModelWith5Output
 from aimet_torch.onnx_utils import OnnxExportApiArgs
 from aimet_torch.qc_quantize_op import QcQuantizeWrapper, QcQuantizeStandalone, StaticGridQuantWrapper
-from aimet_torch.quantsim import check_accumulator_overflow, compute_encodings_for_sims
+from aimet_torch.v1.quantsim import check_accumulator_overflow, compute_encodings_for_sims
 import aimet_torch.v2.nn as aimet_nn
 from aimet_torch.v2.nn.fake_quant._legacy_impl import _FakeQuantizedUnaryOpMixin
 from aimet_torch.v2.quantization.affine import QuantizeDequantize

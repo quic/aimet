@@ -27,7 +27,7 @@ Top-level API
     :members:
     :member-order: bysource
 
-.. autoclass:: aimet_torch.auto_quant.AutoQuant
+.. autoclass:: aimet_torch.v1.auto_quant.AutoQuant
     :members:
 
 Code Examples
@@ -38,7 +38,7 @@ Code Examples
     :emphasize-lines: 74-78,86-
 
 .. note::
-   To use :class:`auto_quant.AutoQuant <aimet_torch.auto_quant.AutoQuant>` (will be deprecated), apply the following code changes to step 5 and 7.
+   To use :class:`auto_quant.AutoQuant <aimet_torch.v1.auto_quant.AutoQuant>` (will be deprecated), apply the following code changes to step 5 and 7.
 
 .. literalinclude:: ../torch_code_examples/auto_quant.py
     :language: python

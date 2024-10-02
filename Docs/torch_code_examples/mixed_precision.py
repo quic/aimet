@@ -40,7 +40,7 @@
 import torch
 from aimet_common.defs import QuantizationDataType, CallbackFunc
 from aimet_torch.mixed_precision import choose_mixed_precision
-from aimet_torch.quantsim import QuantizationSimModel
+from aimet_torch.v1.quantsim import QuantizationSimModel
 from aimet_torch.amp.mixed_precision_algo import GreedyMixedPrecisionAlgo
 # End step 0
 

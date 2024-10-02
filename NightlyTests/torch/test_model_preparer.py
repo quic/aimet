@@ -42,7 +42,7 @@ from torchvision import models
 
 from aimet_torch.model_preparer import prepare_model, _prepare_traced_model
 from aimet_torch.model_validator.model_validator import ModelValidator
-from aimet_torch.quantsim import QuantizationSimModel
+from aimet_torch.v1.quantsim import QuantizationSimModel
 
 
 def evaluate(model: torch.nn.Module, dummy_input: torch.Tensor):

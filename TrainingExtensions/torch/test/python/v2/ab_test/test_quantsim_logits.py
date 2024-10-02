@@ -48,7 +48,7 @@ from ..models_ import models_to_test
 
 from aimet_common.defs import QuantScheme
 
-from aimet_torch.quantsim import QuantizationSimModel as V1QuantizationSimModel
+from aimet_torch.v1.quantsim import QuantizationSimModel as V1QuantizationSimModel
 from aimet_torch.v2.quantsim import QuantizationSimModel as V2QuantizationSimModel
 
 

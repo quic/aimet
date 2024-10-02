@@ -45,7 +45,7 @@ import spconv.pytorch as spconv
 from aimet_common.defs import QuantScheme
 from aimet_torch.qc_quantize_op import StaticGridQuantWrapper, StaticGridPerTensorQuantizer,\
     StaticGridPerChannelQuantizer, LearnedGridQuantWrapper, LearnedGridTensorQuantizer
-from aimet_torch.quantsim import QuantizationSimModel
+from aimet_torch.v1.quantsim import QuantizationSimModel
 from aimet_common.libpymo import TfEncoding
 
 

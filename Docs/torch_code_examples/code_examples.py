@@ -49,7 +49,7 @@ from aimet_torch.defs import WeightSvdParameters, SpatialSvdParameters, ChannelP
 from aimet_torch.compress import ModelCompressor
 
 # Quantization related import
-from aimet_torch.quantsim import QuantizationSimModel
+from aimet_torch.v1.quantsim import QuantizationSimModel
 
 # Both compression and quantization related imports
 

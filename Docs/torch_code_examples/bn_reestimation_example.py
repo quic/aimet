@@ -191,7 +191,7 @@ def create_quant_sim(model, dummy_input, use_cuda):
 
     # Create QuantSim
     from aimet_common.defs import QuantScheme
-    from aimet_torch.quantsim import QuantizationSimModel
+    from aimet_torch.v1.quantsim import QuantizationSimModel
 
     sim = QuantizationSimModel(model=model,
                                quant_scheme=QuantScheme.training_range_learning_with_tf_init,

@@ -50,10 +50,10 @@ import aimet_torch.v2.nn as aimet_nn
 from aimet_torch.v2.nn import QuantizationMixin
 from aimet_torch.v2.quantization.affine import Quantize, QuantizeDequantize
 from aimet_torch.v2.quantization.encoding_analyzer import MinMaxEncodingAnalyzer
-from aimet_torch.nn.modules.custom import Add
+from aimet_torch.v1.nn.modules.custom import Add
 from aimet_torch import onnx_utils
 from aimet_torch.v2.quantsim import QuantizationSimModel
-from aimet_torch.quantsim import OnnxExportApiArgs
+from aimet_torch.v1.quantsim import OnnxExportApiArgs
 from aimet_torch.qc_quantize_op import QcQuantizeWrapper
 from aimet_torch.utils import get_layer_by_name
 
@@ -363,7 +363,7 @@ class TestQuantsimOnnxExport:
 
     @torch.no_grad()
     def test_json_interchangeable(self):
-        from aimet_torch.quantsim import QuantizationSimModel as QuantizationSimModelV1
+        from aimet_torch.v1.quantsim import QuantizationSimModel as QuantizationSimModelV1
         from aimet_torch.v2.quantsim import QuantizationSimModel
 
         torch.manual_seed(0)

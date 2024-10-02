@@ -55,7 +55,7 @@ from aimet_torch.batch_norm_fold import (
 )
 from models.test_models import TransposedConvModel, Conv3dModel, Conv3dModel1
 from aimet_torch.utils import create_rand_tensors_given_shapes, get_device
-from aimet_torch.quantsim import QuantizationSimModel
+from aimet_torch.v1.quantsim import QuantizationSimModel
 from aimet_torch.model_preparer import prepare_model
 from aimet_common.defs import QuantScheme
 import aimet_torch.batch_norm_fold as batch_norm_fold

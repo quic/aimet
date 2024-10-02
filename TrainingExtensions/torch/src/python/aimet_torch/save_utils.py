@@ -37,7 +37,7 @@
 
 """ Utilities to save a models and related parameters """
 
-from aimet_torch.quantsim import ExportableQuantModule
+from aimet_torch.v1.quantsim import ExportableQuantModule
 
 
 class SaveUtils:

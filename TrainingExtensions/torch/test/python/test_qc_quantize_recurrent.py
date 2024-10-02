@@ -50,7 +50,7 @@ from aimet_common.defs import QuantScheme, QuantizationDataType
 from aimet_common.utils import AimetLogger
 from aimet_torch.qc_quantize_op import QcQuantizeOpMode
 from aimet_torch.qc_quantize_recurrent import QcQuantizeRecurrent
-from aimet_torch.quantsim import QuantizationSimModel
+from aimet_torch.v1.quantsim import QuantizationSimModel
 from aimet_torch.tensor_quantizer import LearnedGridTensorQuantizer
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Test)

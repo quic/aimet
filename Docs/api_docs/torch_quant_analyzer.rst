@@ -28,11 +28,11 @@ Top-level API
     learn more about the differences between :mod:`aimet_torch` and :mod:`aimet_torch.v2`, please visit the
     :ref:`QuantSim v2 Overview<ug-aimet-torch-v2-overview>`.
 
-.. autoclass:: aimet_torch.quant_analyzer.QuantAnalyzer
+.. autoclass:: aimet_torch.v1.quant_analyzer.QuantAnalyzer
 |
-.. automethod:: aimet_torch.quant_analyzer.QuantAnalyzer.enable_per_layer_mse_loss
+.. automethod:: aimet_torch.v1.quant_analyzer.QuantAnalyzer.enable_per_layer_mse_loss
 |
-.. automethod:: aimet_torch.quant_analyzer.QuantAnalyzer.analyze
+.. automethod:: aimet_torch.v1.quant_analyzer.QuantAnalyzer.analyze
 |
 .. autoclass:: aimet_common.utils.CallbackFunc
 |
@@ -43,17 +43,17 @@ We can avoid running all the utilities that QuantAnalyzer offers and only run th
 need to have the QuantizationSimModel object, Then we call the desired QuantAnalyzer utility of our interest and pass
 the same object to it.
 
-.. automethod:: aimet_torch.quant_analyzer.QuantAnalyzer.check_model_sensitivity_to_quantization
+.. automethod:: aimet_torch.v1.quant_analyzer.QuantAnalyzer.check_model_sensitivity_to_quantization
 |
-.. automethod:: aimet_torch.quant_analyzer.QuantAnalyzer.perform_per_layer_analysis_by_enabling_quant_wrappers
+.. automethod:: aimet_torch.v1.quant_analyzer.QuantAnalyzer.perform_per_layer_analysis_by_enabling_quant_wrappers
 |
-.. automethod:: aimet_torch.quant_analyzer.QuantAnalyzer.perform_per_layer_analysis_by_disabling_quant_wrappers
+.. automethod:: aimet_torch.v1.quant_analyzer.QuantAnalyzer.perform_per_layer_analysis_by_disabling_quant_wrappers
 |
-.. automethod:: aimet_torch.quant_analyzer.QuantAnalyzer.export_per_layer_encoding_min_max_range
+.. automethod:: aimet_torch.v1.quant_analyzer.QuantAnalyzer.export_per_layer_encoding_min_max_range
 |
-.. automethod:: aimet_torch.quant_analyzer.QuantAnalyzer.export_per_layer_stats_histogram
+.. automethod:: aimet_torch.v1.quant_analyzer.QuantAnalyzer.export_per_layer_stats_histogram
 |
-.. automethod:: aimet_torch.quant_analyzer.QuantAnalyzer.export_per_layer_mse_loss
+.. automethod:: aimet_torch.v1.quant_analyzer.QuantAnalyzer.export_per_layer_mse_loss
 |
 
 Code Examples

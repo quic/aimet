@@ -46,7 +46,7 @@ from aimet_common.defs import MAP_ROUND_MODE_TO_PYMO, QuantizationDataType
 from aimet_torch.qc_quantize_op import StaticGridQuantWrapper, LearnedGridQuantWrapper
 from models.test_models import ModelWithTwoInputs, ModelWithTransposeConv
 from aimet_torch.qc_quantize_op import QuantScheme
-from aimet_torch.quantsim import QuantizationSimModel
+from aimet_torch.v1.quantsim import QuantizationSimModel
 from aimet_torch.quantsim_straight_through_grad import calculate_forward_pass
 from aimet_torch.tensor_quantizer import StaticGridPerTensorQuantizer, StaticGridPerChannelQuantizer, \
     LearnedGridTensorQuantizer, ParameterQuantizer

@@ -43,7 +43,7 @@ from models.test_models import TinyModel
 from models.test_models import ModelWithUnusedMatmul
 from aimet_torch.examples.test_models import SingleResidualWithAvgPool
 from aimet_torch.v2.quantsim import QuantizationSimModel
-from aimet_torch.quantsim import QuantScheme
+from aimet_torch.v1.quantsim import QuantScheme
 from aimet_torch.v2.visualization_tools import visualize_stats, visualize_advanced_stats
 from aimet_common.quantsim_config.utils import get_path_for_per_channel_config
 

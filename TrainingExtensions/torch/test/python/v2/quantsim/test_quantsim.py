@@ -45,7 +45,7 @@ import numpy as np
 from aimet_common.quantsim_config.utils import get_path_for_per_channel_config
 from aimet_common.defs import QuantizationDataType
 from aimet_torch import onnx_utils
-from aimet_torch.quantsim import load_encodings_to_sim, QuantScheme
+from aimet_torch.v1.quantsim import load_encodings_to_sim, QuantScheme
 from aimet_torch.v2.quantsim import QuantizationSimModel
 from aimet_torch.v2.quantization.encoding_analyzer import PercentileEncodingAnalyzer
 from aimet_torch.v2.quantization.base import QuantizerBase

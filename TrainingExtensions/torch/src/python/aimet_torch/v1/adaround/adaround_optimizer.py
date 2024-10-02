@@ -50,9 +50,9 @@ import torch.distributed as dist
 from aimet_common.utils import AimetLogger
 from aimet_torch import utils
 from aimet_torch.qc_quantize_op import StaticGridQuantWrapper
-from aimet_torch.adaround.activation_sampler import ActivationSampler
-from aimet_torch.adaround.adaround_loss import AdaroundLoss, AdaroundHyperParameters
-from aimet_torch.adaround.adaround_wrapper import AdaroundWrapper
+from aimet_torch.v1.adaround.activation_sampler import ActivationSampler
+from aimet_torch.v1.adaround.adaround_loss import AdaroundLoss, AdaroundHyperParameters
+from aimet_torch.v1.adaround.adaround_wrapper import AdaroundWrapper
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
 BATCH_SIZE = 32

@@ -45,9 +45,9 @@ from torch import nn
 from torch.utils.data import DataLoader
 
 from aimet_common.utils import AimetLogger
-from aimet_torch.seq_mse import SequentialMse as V1SequentialMse
-from aimet_torch.seq_mse import SeqMseParams as V1SeqMseParams
-from aimet_torch.seq_mse import SUPPORTED_MODULES
+from aimet_torch.v1.seq_mse import SequentialMse as V1SequentialMse
+from aimet_torch.v1.seq_mse import SeqMseParams as V1SeqMseParams
+from aimet_torch.v1.seq_mse import SUPPORTED_MODULES
 from aimet_torch.v2.quantization.base import QuantizerBase
 from aimet_torch.v2.quantization.affine import AffineQuantizerBase, QuantizeDequantize, GroupedBlockQuantizeDequantize
 from aimet_torch.v2.quantization.affine.backends import torch_builtins

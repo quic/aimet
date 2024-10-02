@@ -75,16 +75,16 @@ All you need is drop-in replacement of import statements from :mod:`aimet_torch`
 
 .. code-block:: diff
 
-   -from aimet_torch.quantsim import QuantizationSimModel
+   -from aimet_torch.v1.quantsim import QuantizationSimModel
    +from aimet_torch.v2.quantsim import QuantizationSimModel
 
-   -from aimet_torch.adaround.adaround_weight import Adaround, AdaroundParameters
+   -from aimet_torch.v1.adaround.adaround_weight import Adaround, AdaroundParameters
    +from aimet_torch.v2.adaround import Adaround, AdaroundParameters
 
-   -from aimet_torch.seq_mse import apply_seq_mse
+   -from aimet_torch.v1.seq_mse import apply_seq_mse
    +from aimet_torch.v2.seq_mse import apply_seq_mse
 
-   -from aimet_torch.quant_analyzer import QuantAnalyzer
+   -from aimet_torch.v1.quant_analyzer import QuantAnalyzer
    +from aimet_torch.v2.quant_analyzer import QuantAnalyzer
 
 

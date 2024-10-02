@@ -55,7 +55,7 @@ import torch.nn as nn
 import pytest
 
 from aimet_torch import onnx_utils
-from aimet_torch.quantsim import QuantizationSimModel
+from aimet_torch.v1.quantsim import QuantizationSimModel
 
 from aimet_common.defs import QuantizationDataType
 from aimet_common.amp.utils import AMPSearchAlgo, calculate_starting_bit_ops, sort_accuracy_list

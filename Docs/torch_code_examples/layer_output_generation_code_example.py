@@ -40,7 +40,7 @@
 # Step 0. Import statements
 import torch
 
-from aimet_torch.quantsim import QuantizationSimModel, load_encodings_to_sim
+from aimet_torch.v1.quantsim import QuantizationSimModel, load_encodings_to_sim
 
 from aimet_torch.layer_output_utils import LayerOutputUtil, NamingScheme
 from aimet_torch.onnx_utils import OnnxExportApiArgs

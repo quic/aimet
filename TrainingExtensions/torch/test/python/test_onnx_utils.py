@@ -41,7 +41,7 @@ import os
 import tempfile
 from collections import defaultdict
 
-import aimet_torch.nn.modules.custom as aimet_modules
+import aimet_torch.v1.nn.modules.custom as aimet_modules
 import onnx
 import pytest
 import torch
@@ -237,7 +237,7 @@ class TestOnnxUtils:
 
     def test_onnx_export_complex_model(self):
 
-        from aimet_torch.nn.modules.custom import Add
+        from aimet_torch.v1.nn.modules.custom import Add
 
         class ResidualLayer1(torch.nn.Module):
             def __init__(self):
@@ -569,7 +569,7 @@ class TestOnnxUtils:
                 assert name in actual_nodes
 
     def test_onnx_custom_param_mapping(self):
-        from aimet_torch.nn.modules.custom import Add
+        from aimet_torch.v1.nn.modules.custom import Add
 
         class GroupNormModel(torch.nn.Module):
             def __init__(self):

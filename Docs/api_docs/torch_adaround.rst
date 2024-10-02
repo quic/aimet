@@ -24,12 +24,12 @@ Top-level API
     learn more about the differences between :mod:`aimet_torch` and :mod:`aimet_torch.v2`, please visit the
     :ref:`QuantSim v2 Overview<ug-aimet-torch-v2-overview>`.
 
-.. autofunction:: aimet_torch.adaround.adaround_weight.Adaround.apply_adaround
+.. autofunction:: aimet_torch.v1.adaround.adaround_weight.Adaround.apply_adaround
 
 
 Adaround Parameters
 ===================
-.. autoclass:: aimet_torch.adaround.adaround_weight.AdaroundParameters
+.. autoclass:: aimet_torch.v1.adaround.adaround_weight.AdaroundParameters
     :members:
 
 

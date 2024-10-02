@@ -47,7 +47,7 @@ import torch
 from aimet_common import quantsim
 from aimet_torch.examples.test_models import SingleResidualWithAvgPool
 from aimet_torch.experimental.v2.quantsim.export_utils import EncodingType
-from aimet_torch.quantsim import QuantizationSimModel as QuantizationSimModelV1, QuantizationDataType
+from aimet_torch.v1.quantsim import QuantizationSimModel as QuantizationSimModelV1, QuantizationDataType
 from aimet_torch.v2.quantsim import QuantizationSimModel as QuantizationSimModelV2
 from aimet_torch.v2.quantization.base import QuantizerBase
 from aimet_torch.v2.quantization.affine.quantizer import QuantizeDequantize, GroupedBlockQuantizeDequantize

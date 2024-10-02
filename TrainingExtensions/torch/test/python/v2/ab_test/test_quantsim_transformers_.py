@@ -55,10 +55,10 @@ from aimet_torch.transformers.activation import create_quantizable_transformer_e
 from aimet_torch.utils import create_rand_tensors_given_shapes, replace_modules_of_type1_using_constructor
 from aimet_torch.meta import connectedgraph_utils
 from aimet_torch.qc_quantize_op import StaticGridQuantWrapper, StaticGridPerTensorQuantizer
-from aimet_torch.quantsim import QuantizationSimModel
+from aimet_torch.v1.quantsim import QuantizationSimModel
 from aimet_torch import utils
 #TODO: import libpymo from aimet_common
-from aimet_torch.quantsim import libpymo
+from aimet_torch.v1.quantsim import libpymo
 from aimet_torch.quantsim_config import quantsim_config as qsim_config
 from aimet_torch.model_preparer import prepare_pt_transformer_for_quantsim
 from aimet_torch.transformers.utils import get_quantizable_pt_transformer_model
