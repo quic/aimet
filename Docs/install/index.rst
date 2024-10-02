@@ -54,14 +54,14 @@ The AIMET PyTorch GPU PyPI packages are available for environments that meet the
 
 .. code-block:: bash
 
-    apt-get update && apt-get install liblapacke libpython3.10-dev
+    apt-get install liblapacke libpython3-dev
     python3 -m pip install aimet-torch
 
 
 Release Packages
 ~~~~~~~~~~~~~~~~
 
-For other AIMET variants, install the *latest* version from the .whl files hosted at https://github.com/quic/aimet/releases
+For other AIMET variants, install the *latest* version from the .whl files hosted at https://github.com/quic/aimet/releases (compatible with python 3.10 only at this time).
 
 **Prerequisite**
 
@@ -71,7 +71,7 @@ The following pre-requisites apply to all variants. The GPU variants may need ad
 .. code-block:: bash
 
     # Install pre-requisite packages
-    apt-get update && apt-get install liblapacke libpython3.10-dev
+    apt-get install liblapacke libpython3-dev
 
     # Install an compatible version of pip (since the latest version is NOT compatible with our wheel packages)
     python3 -m pip install pip==24.0
