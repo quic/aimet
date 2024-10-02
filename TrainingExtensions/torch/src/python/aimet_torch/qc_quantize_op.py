@@ -467,6 +467,8 @@ class QcQuantizeWrapper(nn.Module): # pylint: disable=too-many-public-methods
                 tensor.dtype in utils.torch_dtypes_to_ignore_for_quantization or \
                 (tensor_quantizer.is_const and torch.numel(tensor) == 1) or \
                 not tensor_quantizer.enabled:
+            # If the tensor is unquantizable or if it's a  scalar-constant, disable the quantizer explicitly
+            tensor_quantizer.enabled = False
             return False
         return True
 
