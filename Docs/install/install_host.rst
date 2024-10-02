@@ -141,10 +141,15 @@ Set the package details as follows:
     export find_pkg_url_str="-f https://download.pytorch.org/whl/torch_stable.html"
 
 Install the selected AIMET package as specified below:
+
 **NOTE:** Python dependencies will automatically get installed.
 
 .. code-block:: bash
 
+    # Install an compatible version of pip (since the latest version is NOT compatible with our wheel packages)
+    python3 -m pip install pip==24.0
+
+    # Install the wheel package
     python3 -m pip install ${download_url}/${wheel_file_name} ${find_pkg_url_str}
 
 Install common debian packages
@@ -240,4 +245,3 @@ Set the common environment variables as follows:
 .. code-block:: bash
 
     source /usr/local/lib/python3.10/dist-packages/aimet_common/bin/envsetup.sh
-

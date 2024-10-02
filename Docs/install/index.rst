@@ -65,11 +65,17 @@ For other AIMET variants, install the *latest* version from the .whl files hoste
 
 **Prerequisite**
 
-The following pre-requisites apply to all variants. The GPU variants may need additional packages - please see `Advanced Installation Instructions`_ for details. 
+The following pre-requisites apply to all variants. The GPU variants may need additional packages - please see `Advanced Installation Instructions`_ for details.
+
 
 .. code-block:: bash
 
+    # Install pre-requisite packages
     apt-get update && apt-get install liblapacke libpython3.10-dev
+
+    # Install an compatible version of pip (since the latest version is NOT compatible with our wheel packages)
+    python3 -m pip install pip==24.0
+
 
 **PyTorch**
 
@@ -80,7 +86,7 @@ The following pre-requisites apply to all variants. The GPU variants may need ad
 
     # Pytorch 2.1 CPU only
     python3 -m pip install |download_url|\ |version|/aimet_torch-\ |version|.cpu\ |whl_suffix| -f |torch_pkg_url|
-    
+
     # Pytorch 1.13 with CUDA 11.x
     python3 -m pip install |download_url|\ |version|/aimet_torch-\ |version|.cu117\ |whl_suffix| -f |torch_pkg_url|
 
@@ -96,7 +102,7 @@ The following pre-requisites apply to all variants. The GPU variants may need ad
     python3 -m pip install |download_url|\ |version|/aimet_tensorflow-\ |version|.cpu\ |whl_suffix|
 
 
-**Onnx**
+**ONNX**
 
 .. parsed-literal::
 
