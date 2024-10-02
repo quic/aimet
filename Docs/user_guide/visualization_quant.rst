@@ -2,39 +2,40 @@
 
 .. _ug-quantization-visualization:
 
-====================================
-AIMET Visualization for Quantization
-====================================
-
+####################################
+AIMET visualization for quantization
+####################################
 
 Overview
 ========
-AIMET Visualization adds analytical capability to the AIMET tool (which helps quantize and compress ML models) through visualization. It provides more detailed insights into AIMET features as users are able to analyze a model's layers in terms of compressibility and also highlight potential issues when applying quantization. The tool also assists in displaying progress for computationally heavy tasks. The visualizations get saved as an HTML file under the specified directory.
+
+AIMET Visualization provides detailed insights into AIMET features. You can analyze model layers' compressibility and highlight potential issues when applying quantization. The tool also displays progress for computationally heavy tasks. The visualizations get saved as an HTML file.
 
 Quantization
 ============
-During quantization, common parameters are used throughout a layer for converting the floating point weight values to INT8. If the dynamic range in weights is very high, the quantization will not be very granular. To equalize the weight range we apply Cross Layer Equalization.
-In order to understand if we need to apply Cross Layer Equalization, we can visualize the weight range for every channel in a layer. If the weight range varies a lot over the various channels, applying cross layer equalization helps in improving the Quantization accuracy.
+
+During quantization, common parameters are used throughout a layer for converting the floating point weight values to INT8. If the dynamic range in weights is very high, the quantization is not very granular. The weight range can be equalized by applying cross layer equalization.
+
+To determine if you need to apply cross layer equalization, visualize the weight range for every channel in a layer. If the weight range varies a lot across channels, applying cross layer equalization helps in improving the Quantization accuracy.
 
 .. image:: ../images/vis_3.png
 
 PyTorch
 -------
 
-In PyTorch, we can visualize the weights for a model. We can also visualize the weight ranges for a model before and after Cross Layer Equalization.
-There are three main functions a user can invoke:
+In PyTorch, you can visualize the weights for a model. You can also visualize the weight ranges for a model before and after cross layer equalization.
+There are three main functions you can invoke:
 
-#. User can analyze relative weight ranges of model to see potentially problematic layers for quantization
-#. User can understand each layer in the model
-#. User can visualize the model, comparing weights before and after quantization.
+#. Analyze relative weight ranges of the model to see potentially problematic layers for quantization
+#. Understand each layer in the model
+#. Visualize the model, comparing weights before and after quantization
 
 TensorFlow
 ----------
 
-In TensorFlow, we can visualize the weight ranges and relative weight ranges over various channels in a layer.
-User can also use the same functions to see the changes in a layer weight ranges before and after Cross Layer Equalization.
+In TensorFlow, you can visualize the weight ranges and relative weight ranges over various channels in a layer. You can also use the same functions to see the changes in a layer's weight ranges before and after cross layer equalization.
 
-There are two main functions a user can invoke:
+There are two main functions you can invoke:
 
-#. User can analyze relative weight ranges of a layer to see potentially problematic layers for quantization
-#. User can visualize weight ranges of a layer and see the various statistics for weights
+#. Analyze relative weight ranges of a layer to see potentially problematic layers for quantization
+#. Visualize weight ranges of a layer and see the various statistics for weights

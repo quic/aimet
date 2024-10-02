@@ -1,21 +1,24 @@
-===================
+###################
 AIMET Visualization
-===================
+###################
 
 
 Overview
 ========
-AIMET Visualization adds analytical capability to the AIMET tool (which helps quantize and compress ML models) through visualization. It provide more detailed insights in to AIMET features as users are able to analyze a model’s layers in terms of compressibility and also highlight potential issues when applying quantization. The tool also assists in displaying progress for computationally heavy tasks.
+
+AIMET Visualization adds analytical capability to the AIMET tool (which helps quantize and compress ML models) through visualization. It provide more detailed insights in to AIMET features, enabling you to analyze a model’s layers in terms of compressibility and also highlight potential issues when applying quantization. The tool also assists in displaying progress for computationally heavy tasks.
 
 Design
 ======
-Given a model, a user can start a Bokeh server session and then invoke functions which will produce visualizations to help analyze and understand the model before using AIMET features from quantization and compression
+
+Given a model, you can start a Bokeh server session and then invoke functions that produce visualizations to help analyze and understand the model before using AIMET features from quantization and compression.
 
 .. image:: ../images/vis_1.png
 
 
 Compression
 ===========
+
 Evaluation scores during compression are displayed in a table as they are computed and users can see the progress displayed while computing these scores. After Greedy Selection has run, the optimal compression ratios are also displayed in a graph
 
 .. image:: ../images/vis_4.png

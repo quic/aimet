@@ -1,36 +1,37 @@
 .. _ug-quantsim-config:
 
-======================================
-Quantization Simulation Configuration
-======================================
+#####################################
+Quantization simulation configuration
+#####################################
+
 Overview
 ========
-AIMET allows the configuration of quantizer placement and settings in accordance with a set of rules specified in a json configuration file, applied when the Quantization Simulation API is called.
 
-Settings such as quantizer enablement, per channel quantization, symmetric quantization, and specifying fused ops when quantizing can be configurated.
-The general use case for this file would be for users to match the quantization rules for a particular runtime they would like to simulate.
+You can configure settings such as quantizer enablement, per-channel quantization, symmetric quantization, and specifying fused ops when quantizing, for example to match the quantization rules for a particular runtime you would like to simulate.
+
+Quantizer placement and settings are set in a JSON configuration file. The configuration is applied when the Quantization Simulation API is called.
 
 For examples on how to provide a specific configuration file to AIMET Quantization Simulation,
-refer to the API docs for :doc:`PyTorch Quantsim<../api_docs/torch_quantsim>`, :doc:`TensorFlow Quantsim<../api_docs/tensorflow_quantsim>`, and :doc:`Keras Quantsim<../api_docs/keras_quantsim>`.
+see :doc:`PyTorch Quantsim<../api_docs/torch_quantsim>`, :doc:`TensorFlow Quantsim<../api_docs/tensorflow_quantsim>`, and :doc:`Keras Quantsim<../api_docs/keras_quantsim>`.
 
-It is advised for the user to begin with the default configuration file under
+Begin with the default configuration file, `default-quantsim-config-file`.
 
-|default-quantsim-config-file|
+Most of the time, no changes to the default configuration file are needed.
 
-For most users of AIMET, no additional changes to the default configuration file should be needed.
-
-Configuration File Structure
+Configuration file structure
 ============================
-The configuration file contains six main sections, in increasing amounts of specificity:
+
+The configuration file contains six main sections, ordered from less- to more specific:
 
 .. image:: ../images/quantsim_config_file.png
 
-Rules defined in a more general section can be overruled by subsequent rules defined in a more specific case.
-For example, one may specify in "defaults" for no layers to be quantized, but then turn on quantization for specific layers in the "op_type" section.
+Rules defined in a more general section are overridden by subsequent rules defined in a more specific case.
+For example, you can specify in "defaults" that no layers be quantized, but then turn on quantization for specific layers in the "op_type" section.
 
-How to configure individual Configuration File Sections
-=======================================================
-When working with a new runtime with different rules, or for experimental purposes, users can refer to this section to understand how to configure individual sections in a configuration file.
+Modifying configuration file sections
+=====================================
+
+Configure individual sections as described here.
 
 1. **defaults**:
 
@@ -39,53 +40,65 @@ When working with a new runtime with different rules, or for experimental purpos
        :start-after: # defaults start
        :end-before:  # defaults end
 
-    In the defaults section, it is required to include an "ops" dictionary and a "params" dictionary (though these dictionaries may be empty).
+    In the defaults section, include an "ops" dictionary and a "params" dictionary (though these dictionaries can be empty).
 
-    The "ops" dictionary holds settings that will apply to all activation quantizers in the model.
-    In this section, the following settings are available:
+    The "ops" dictionary holds settings that apply to all activation quantizers in the model.
+    The following settings are available:
 
         - is_output_quantized:
-            An optional parameter. If included, it must be set to "True".
-            Including this setting will turn on all output activation quantizers by default.
-            If not specified, all activation quantizers will start off as disabled.
+            Optional. If included, must be "True".
+            Including this setting turns on all output activation quantizers by default.
+            If not specified, all activation quantizers are disabled to start.
 
-            For cases when the runtime quantizes input activations, we typically see this only done for certain op types.
-            Configuring these settings for specific op types is covered in sections further below.
+            In cases when the runtime quantizes input activations, this is only done for certain op types.
+            To configure these settings for specific op types see below.
 
         - is_symmetric:
-            An optional parameter. If included, possible settings include "True" and "False".
-            A "True" setting will place all activation quantizers in symmetric mode by default.
-            A "False" setting, or omitting the parameter altogether, will set all activation quantizers to asymmetric mode by default.
+            Optional. If included, value is "True" or "False".
 
-    The "params" dictionary holds settings that will apply to all parameter quantizers in the model.
-    In this section, the following settings are available:
+            "True" places all activation quantizers in symmetric mode by default.
+
+            "False", or omitting the parameter, sets all activation quantizers to asymmetric mode by default.
+
+    The "params" dictionary holds settings that apply to all parameter quantizers in the model.
+    The following settings are available:
 
         - is_quantized:
-            An optional parameter. If included, possible settings include "True" and "False".
-            A "True" setting will turn on all parameter quantizers by default.
-            A "False" setting, or omitting the parameter altogether, will disable all parameter quantizers by default.
+            Optional.  If included, value is "True" or "False".
+
+            "True" turns on all parameter quantizers by default.
+
+            "False", or omitting the parameter, disables all parameter quantizers by default.
 
         - is_symmetric:
-            An optional parameter. If included, possible settings include "True" and "False".
-            A "True" setting will place all parameter quantizers in symmetric mode by default.
-            A "False" setting, or omitting the parameter altogether, will set all parameter quantizers to asymmetric mode by default.
+            Optional.  If included, value is "True" or "False".
 
-    Aside from the "ops" and "params" dictionary, additional settings governing quantizers in the model are available:
+            "True" places all parameter quantizers in symmetric mode by default.
 
-    - strict_symmetric:
-        An optional parameter. If included, possible settings include "True" and "False".
-        When set to "True", quantizers which are configured in symmetric mode will use strict symmetric quantization.
-        When set to "False" or omitting the parameter altogether, quantizers which are configured in symmetric mode will not use strict symmetric quantization.
+            "False", or omitting the parameter, sets all parameter quantizers to asymmetric mode by default.
 
-    - unsigned_symmetric:
-        An optional parameter. If included, possible settings include "True" and "False".
-        When set to "True", quantizers which are configured in symmetric mode will use unsigned symmetric quantization when available.
-        When set to "False" or omitting the parameter altogether, quantizers which are configured in symmetric mode will not use unsigned symmetric quantization.
+    Outside the "ops" and "params" dictionaries, the following additional quantizer settings are available:
 
-    - per_channel_quantization:
-        An optional parameter. If included, possible settings include "True" and "False".
-        When set to "True", parameter quantizers will use per channel quantization as opposed to per tensor quantization.
-        When set to "False" or omitting the parameter altogether, parameter quantizers will use per tensor quantization.
+        - strict_symmetric:
+            Optional.  If included, value is "True" or "False".
+
+            "True" causes quantizers configured in symmetric mode to use strict symmetric quantization.
+
+            "False", or omitting the parameter, causes quantizers configured in symmetric mode to not use strict symmetric quantization.
+
+        - unsigned_symmetric:
+            Optional.  If included, value is "True" or "False".
+
+            "True" causes quantizers configured in symmetric mode use unsigned symmetric quantization when available.
+
+            "False", or omitting the parameter, causes quantizers configured in symmetric mode to not use unsigned symmetric quantization.
+
+        - per_channel_quantization:
+            Optional.  If included, value is "True" or "False".
+
+            "True" causes parameter quantizers to use per-channel quantization rather than per-tensor quantization.
+
+            "False" or omitting the parameter, causes parameter quantizers to use per-tensor quantization.
 
 2. **params**:
 
@@ -95,9 +108,9 @@ When working with a new runtime with different rules, or for experimental purpos
        :end-before:  # params end
 
 
-    In the params section, settings can be configured for certain types of parameters throughout the model.
-    For example, adding settings for "weight" will affect all parameters of type "weight" in the model.
-    Currently supported parameter types include:
+    In the params section, configure settings for parameters that apply throughout the model.
+    For example, adding settings for "weight" affects all parameters of type "weight" in the model.
+    Supported parameter types include:
 
         - weight
         - bias
@@ -105,16 +118,22 @@ When working with a new runtime with different rules, or for experimental purpos
     For each parameter type, the following settings are available:
 
         - is_quantized:
-            An optional parameter. If included, possible settings include "True" and "False".
-            A "True" setting will turn on all parameter quantizers of that type.
-            A "False" setting, will disable all parameter quantizers of that type.
-            By omitting the setting, the parameter will fall back to the setting specified by the defaults section.
+            Optional.  If included, value is "True" or "False".
+
+            "True" turns on all parameter quantizers of that type.
+
+            "False" disables all parameter quantizers of that type.
+
+            Omitting the setting causes the parameter to use the setting specified by the defaults section.
 
         - is_symmetric:
-            An optional parameter. If included, possible settings include "True" and "False".
-            A "True" setting will place all parameter quantizers of that type in symmetric mode.
-            A "False" setting will place all parameter quantizers of that type in asymmetric mode.
-            By omitting the setting, the parameter will fall back to the setting specified by the defaults section.
+            Optional.  If included, value is "True" or "False".
+
+            "True" places all parameter quantizers of that type in symmetric mode.
+
+            "False" places all parameter quantizers of that type in asymmetric mode.
+
+            Omitting the setting causes the parameter to use the setting specified by the defaults section.
 
 3. **op_type**:
 
@@ -123,41 +142,50 @@ When working with a new runtime with different rules, or for experimental purpos
        :start-after: # op_type start
        :end-before:  # op_type end
 
-    In the op type section, settings affecting particular op types can be specified.
-    The configuration file recognizes ONNX op types, and will internally map the type to a PyTorch or TensorFlow op type
-    depending on which framework is used.
+    In the op_type section, configure settings affecting particular op types.
+    The configuration file supports ONNX op types, and internally maps the type to a PyTorch or TensorFlow op type depending on which framework is used.
 
     For each op type, the following settings are available:
 
         - is_input_quantized:
-            An optional parameter. If included, it must be set to "True".
-            Including this setting will turn on input quantization for all ops of this op type.
-            Omitting the setting will keep input quantization disabled for all ops of this op type.
+            Optional. If included, must be "True".
+
+            Including this setting turns on input quantization for all ops of this op type.
+
+            Omitting the setting keeps input quantization disabled for all ops of this op type.
 
         - is_output_quantized:
-            An optional parameter. If included, possible settings include "True" and "False".
-            A "True" setting will turn on output quantization for all ops of this op type.
-            A "False" setting will disable output quantization for all ops of this op type.
-            By omitting the setting, output quantizers of this op type will fall back to the setting specified by the defaults section.
+            Optional.  If included, value is "True" or "False".
+
+            "True" turns on output quantization for all ops of this op type.
+
+            "False" disables output quantization for all ops of this op type.
+
+            Omitting the setting causes output quantizers of this op type to fall back to the setting specified by the defaults section.
 
         - is_symmetric:
-                An optional parameter. If included, possible settings include "True" and "False".
-                A "True" setting will place all quantizers of this op type in symmetric mode.
-                A "False" setting will place all quantizers of this op type in asymmetric mode.
-                By omitting the setting, quantizers of this op type will fall back to the setting specified by the defaults section.
+                Optional.  If included, value is "True" or "False".
+
+                "True" places all quantizers of this op type in symmetric mode.
+
+                "False" places all quantizers of this op type in asymmetric mode.
+
+                Omitting the setting causes quantizers of this op type to fall back to the setting specified by the defaults section.
 
         - per_channel_quantization:
-            An optional parameter. If included, possible settings include "True" and "False".
-            When set to "True", parameter quantizers of this op type will use per channel quantization as opposed to per tensor quantization.
-            When set to "False", parameter quantizers of this op type will use per tensor quantization.
-            By omitting the setting, parameter quantizers of this op type will fall back to the setting specified by the defaults section.
+                Optional.  If included, value is "True" or "False".
+
+                "True" sets parameter quantizers of this op type to use per-channel quantization rather than per-tensor quantization.
+
+                "False" sets parameter quantizers of this op type to use per-tensor quantization.
+                
+                Omitting the setting causes parameter quantizers of this op type to fall back to the setting specified by the defaults section.
 
     For a particular op type, settings for particular parameter types can also be specified.
-    For example, specifying settings for weight parameters of a Conv op type will affect only Conv weights and not weights
-    of Gemm op types.
+    For example, specifying settings for weight parameters of a Conv op type affects only Conv weights and not weights of Gemm op types.
 
-    To specify settings for param types of this op type, include a "params" dictionary under the op type.
-    Settings for this section follow the same convention as settings for parameter types in the preceding "params" section, however will only affect parameters for this op type.
+    To specify settings for param types of an op type, include a "params" dictionary under the op type.
+    Settings for this section follow the same convention as settings for parameter types in the "params" section, but only affect parameters for this op type.
 
 4. **supergroups**:
 
@@ -166,14 +194,14 @@ When working with a new runtime with different rules, or for experimental purpos
        :start-after: # supergroups start
        :end-before:  # supergroups end
 
-    Supergroups are a sequence of operations which are fused during quantization, meaning no quantization noise is introduced between members of the supergroup.
+    Supergroups are a sequence of operations that are fused during quantization, meaning no quantization noise is introduced between members of the supergroup.
     For example, specifying ["Conv, "Relu"] as a supergroup disables quantization between any adjacent Conv and Relu ops in the model.
 
-    When searching for supergroups in the model, only sequential groups of ops with no branches in between will be matched with supergroups defined in the list.
-    Using ["Conv", "Relu"] as an example, if there was a Conv op in the model whose output is used by both a Relu op and a second op, the supergroup would not take effect for these Conv and Relu ops.
+    When searching for supergroups in the model, only sequential groups of ops with no branches in between are matched with supergroups defined in the list.
+    Using ["Conv", "Relu"] as an example, if there were a Conv op in the model whose output is used by both a Relu op and a second op, the supergroup would not include those Conv and Relu ops.
 
     To specify supergroups in the config file, add each entry as a list of op type strings.
-    The configuration file recognizes ONNX op types, and will internally map the types to PyTorch or TensorFlow op types depending on which framework is used.
+    The configuration file supports ONNX op types, and internally maps the type to a PyTorch or TensorFlow op type depending on which framework is used.
 
 5. **model_input**:
 
@@ -182,13 +210,13 @@ When working with a new runtime with different rules, or for experimental purpos
        :start-after: # model_input start
        :end-before:  # model_input end
 
-    The "model_input" section is used to configure the quantization of inputs to the model.
-    In this section, the following setting is available:
+    Use the "model_input" section to configure the quantization of inputs to the model.
+    The following setting is available:
 
     - is_input_quantized:
-        An optional parameter. If included, it must be set to "True".
-        Including this setting will turn on quantization for input quantizers to the model.
-        Omitting the setting will keep input quantizers set to whatever setting they were in as a result of applying configurations from earlier sections.
+        Optional. If included, must be "True".
+        Including this setting turns on quantization for input quantizers to the model.
+        Omitting the setting keeps input quantizers at settings resulting from more general configurations.
 
 6. **model_output**:
 
@@ -197,10 +225,10 @@ When working with a new runtime with different rules, or for experimental purpos
        :start-after: # model_output start
        :end-before:  # model_output end
 
-    The "model_output" section is used to configure the quantization of outputs of the model.
-    In this section, the following setting is available:
+    Use the "model_output" section to configure the quantization of outputs of the model.
+    The following setting is available:
 
     - is_output_quantized:
-        An optional parameter. If included, it must be set to "True".
-        Including this setting will turn on quantization for output quantizers of the model.
-        Omitting the setting will keep output quantizers set to whatever setting they were in as a result of applying configurations from earlier sections.
+        Optional. If included, it must be set to "True".
+        Including this setting turns on quantization for output quantizers of the model.
+        Omitting the setting keeps input quantizers at settings resulting from more general configurations.
