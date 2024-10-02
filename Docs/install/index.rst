@@ -52,9 +52,9 @@ The AIMET PyTorch GPU PyPI packages are available for environments that meet the
 
 **Pip install**
 
-.. code-block::
+.. code-block:: bash
 
-    apt-get install liblapacke
+    apt-get update && apt-get install liblapacke libpython3.10-dev
     python3 -m pip install aimet-torch
 
 
@@ -62,6 +62,14 @@ Release Packages
 ~~~~~~~~~~~~~~~~
 
 For other AIMET variants, install the *latest* version from the .whl files hosted at https://github.com/quic/aimet/releases
+
+**Prerequisite**
+
+The following pre-requisites apply to all variants. The GPU variants may need additional packages - please see `Advanced Installation Instructions`_ for details. 
+
+.. code-block:: bash
+
+    apt-get update && apt-get install liblapacke libpython3.10-dev
 
 **PyTorch**
 
@@ -93,7 +101,7 @@ For other AIMET variants, install the *latest* version from the .whl files hoste
 .. parsed-literal::
 
     # ONNX 1.16 GPU with CUDA 11.x
-    python3 -m pip install |download_url|\ |version|/aimet_onnx-\ |version|.cu117\ |whl_suffix|
+    python3 -m pip install |download_url|\ |version|/aimet_onnx-\ |version|.cu117\ |whl_suffix| -f |torch_pkg_url|
 
     # ONNX 1.16 CPU
     python3 -m pip install |download_url|\ |version|/aimet_onnx-\ |version|.cpu\ |whl_suffix|

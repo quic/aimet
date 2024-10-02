@@ -157,7 +157,7 @@ Set the package details as follows:
     # ex. "aimet_torch-1.34.0.cu121-cp310-cp310-manylinux_2_34_x86_64.whl"
     export wheel_file_name="<wheel file name>"
 
-    # NOTE: Do the following ONLY for the PyTorch variant packages!
+    # NOTE: Do the following ONLY for the PyTorch and ONNX variant packages!
     export find_pkg_url_str="-f https://download.pytorch.org/whl/torch_stable.html"
 
 Install the selected AIMET package as specified below:
