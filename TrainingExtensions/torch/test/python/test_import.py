@@ -36,7 +36,10 @@
 # =============================================================================
 
 def test_default_import():
-    # aimet_torch.quantsim
+    """
+    When: Import from aimet_torch.quantsim
+    Then: Import should be redirected to aimet_torch.v1.quantsim
+    """
     from aimet_torch    import quantsim
     from aimet_torch.v1 import quantsim as v1_quantsim
     assert quantsim.QuantizationSimModel is v1_quantsim.QuantizationSimModel
@@ -45,7 +48,10 @@ def test_default_import():
     from aimet_torch.v1.quantsim import QuantizationSimModel as v1_QuantizationSimModel
     assert QuantizationSimModel is v1_QuantizationSimModel
 
-    # aimet_torch.adaround
+    """
+    When: Import from aimet_torch.adaround
+    Then: Import should be redirected to aimet_torch.v1.adaround
+    """
     from aimet_torch.adaround    import adaround_weight
     from aimet_torch.v1.adaround import adaround_weight as v1_adaround_weight
     assert adaround_weight.Adaround is v1_adaround_weight.Adaround
@@ -54,7 +60,10 @@ def test_default_import():
     from aimet_torch.v1.adaround.adaround_weight import Adaround as v1_Adaround
     assert Adaround is v1_Adaround
 
-    # aimet_torch.seq_mse
+    """
+    When: Import from aimet_torch.seq_mse
+    Then: Import should be redirected to aimet_torch.v1.seq_mse
+    """
     from aimet_torch    import seq_mse
     from aimet_torch.v1 import seq_mse as v1_seq_mse
     assert seq_mse.apply_seq_mse is v1_seq_mse.apply_seq_mse
@@ -63,7 +72,10 @@ def test_default_import():
     from aimet_torch.v1.seq_mse import apply_seq_mse as v1_apply_seq_mse
     assert apply_seq_mse is v1_apply_seq_mse
 
-    # aimet_torch.nn
+    """
+    When: Import from aimet_torch.nn
+    Then: Import should be redirected to aimet_torch.v1.nn
+    """
     from aimet_torch.nn.modules    import custom
     from aimet_torch.v1.nn.modules import custom as v1_custom
     assert custom.Add is v1_custom.Add
@@ -72,7 +84,10 @@ def test_default_import():
     from aimet_torch.v1.nn.modules.custom import Add as v1_Add
     assert Add is v1_Add
 
-    # aimet_torch.auto_quant
+    """
+    When: Import from aimet_torch.auto_quant
+    Then: Import should be redirected to aimet_torch.v1.auto_quant
+    """
     from aimet_torch    import auto_quant
     from aimet_torch.v1 import auto_quant as v1_auto_quant
     assert auto_quant.AutoQuant is v1_auto_quant.AutoQuant
@@ -81,7 +96,10 @@ def test_default_import():
     from aimet_torch.v1.auto_quant import AutoQuant as v1_AutoQuant
     assert AutoQuant is v1_AutoQuant
 
-    # aimet_torch.quant_analyzer
+    """
+    When: Import from aimet_torch.quant_analyzer
+    Then: Import should be redirected to aimet_torch.v1.quant_analyzer
+    """
     from aimet_torch    import quant_analyzer
     from aimet_torch.v1 import quant_analyzer as v1_auto_quant
     assert quant_analyzer.QuantAnalyzer is v1_auto_quant.QuantAnalyzer
