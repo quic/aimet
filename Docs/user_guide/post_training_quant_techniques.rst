@@ -2,14 +2,14 @@
 
 .. _ug-post-training-quantization:
 
-===========================================
-AIMET Post-Training Quantization Techniques
-===========================================
+###########################################
+AIMET post-training quantization techniques
+###########################################
 
 Overview
 ========
 
-It is observed that some ML models show reduced inference accuracy when run on quantized hardware due to approximation noises. AIMET provides post-training quantization techniques that help adjust the parameters in the model such that the model becomes more quantization-friendly. AIMET post-training quantizations are designed to be applied on pre-trained ML models. These techniques are explained as part of the "Data-Free Quantization Through Weight Equalization and Bias Correction” paper at ICCV 2019 - https://arxiv.org/abs/1906.04721
+Some ML models show reduced inference accuracy when run on quantized hardware due to approximation noise. AIMET provides post-training quantization techniques that help adjust the parameters in the model such that the model becomes more quantization-friendly. AIMET post-training quantizations are designed to be applied on pre-trained ML models. These techniques are explained as part of the "Data-Free Quantization Through Weight Equalization and Bias Correction” paper at ICCV 2019 - https://arxiv.org/abs/1906.04721
 
 
 User Flow

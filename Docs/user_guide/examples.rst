@@ -2,33 +2,34 @@
 
 .. image:: ../images/logo-quic-on@h68.png
 
-==============
-AIMET Examples
-==============
+##############
+AIMET examples
+##############
 
-AIMET Examples provide reference code (in the form of *Jupyter Notebooks*) to learn how to
-apply AIMET quantization and compression features. It is also a quick way to become
-familiar with AIMET usage and APIs.
+AIMET examples are *Jupyter Notebooks* that are intended to:
 
-For more details on each of the features and APIs please refer:
-:ref:`Links to User Guide and API Documentation<ug-index>`
+- Familiarize you with the AIMET APIs
+- Demonstrate basic usage: how to apply AIMET to a model
+- Teach you how to use AIMET quantization and compression
+
+For more details on each of the features and APIs see :ref:`Links to User Guide and API Documentation<ug-index>`.
 
 Browse the notebooks
 ====================
 
-The following table has links to browsable versions of the notebooks for different features.
+The following table provides links to browsable versions of the notebooks for several different AIMET features.
 
 **Model Quantization Examples**
 
 .. list-table::
-   :widths: 40 12 12 12
+   :widths: 32 12 12 12
    :header-rows: 1
 
-   * - Features
+   * - Feature
      - PyTorch
      - TensorFlow
      - ONNX
-   * - Quantsim / Quantization-Aware Training (QAT)
+   * - QuantSim / Quantization-Aware Training (QAT)
      - `Link <../Examples/torch/quantization/qat.ipynb>`_
      - `Link <../Examples/tensorflow/quantization/keras/qat.ipynb>`_
      - `Link <../Examples/onnx/quantization/quantsim.ipynb>`_  (no training)
@@ -53,10 +54,10 @@ The following table has links to browsable versions of the notebooks for differe
 **Model Compression Examples**
 
 .. list-table::
-   :widths: 40 12 12
+   :widths: 40 12
    :header-rows: 1
 
-   * - Features
+   * - Feature
      - PyTorch
    * - Channel Pruning
      - `Link <../Examples/torch/compression/channel_pruning.ipynb>`_
@@ -70,41 +71,42 @@ The following table has links to browsable versions of the notebooks for differe
 Running the notebooks
 =====================
 
-Install Jupyter
----------------
-- Install the Jupyter metapackage as follows (pre-pend with "sudo -H" if appropriate):
-``python3 -m pip install jupyter``
+To run the notebooks, follow the instructions below.
 
-- Start the notebook server as follows (please customize the command line options if appropriate):
-``jupyter notebook --ip=* --no-browser &``
+Prerequisites
+-------------
 
-- The above command will generate and display a URL in the terminal. Copy and paste it into your browser.
+#. Install the Jupyter metapackage using the following command. (If necessary, pre-pend the command with "sudo -H".)
+  .. code-block:: shell
 
-
-Download the Example notebooks and related code
-------------------------------------------------
-- Clone the AIMET repo as follows to any location:
-
+    python3 -m pip install jupyter
+#. Start the notebook server as follows:
 .. code-block:: shell
+    
+    jupyter notebook --ip=* --no-browser &
+#. The command generates and displays a URL in the terminal. Copy and paste the URL into your browser.
+#. Install AIMET and its dependencies using the instructions in :doc:`install`.
 
+
+1. Download the example notebooks and related code
+--------------------------------------------------
+
+#. Clone the AIMET repo by running the following commands:
+.. code-block:: shell
    WORKSPACE="<absolute_path_to_workspace>"
    mkdir $WORKSPACE && cd $WORKSPACE
-   # Go to https://github.com/quic/aimet/releases and identify the release tag (<release_tag>) of the AIMET package that you're working with.
+   # Identify the release tag (<release_tag>) of the AIMET package that you're working with at: https://github.com/quic/aimet/releases.
    git clone https://github.com/quic/aimet.git --branch <release_tag>
-   # Update the environment variable as follows:
+   # Update the path environment variable:
    export PYTHONPATH=$PYTHONPATH:${WORKSPACE}/aimet
+#. The dataloader, evaluator, and trainer used in the examples is for the ImageNet dataset.
+  Download the ImageNet dataset from here: https://www.image-net.org/download.php
 
-- The dataloader, evaluator, and trainer utilized in the examples is for the ImageNet dataset.
-  To run the example, please download the ImageNet dataset from here: https://www.image-net.org/download.php
+2. Run the notebooks
+--------------------
 
-- Install AIMET and its dependencies using the instructions in the Installation section'
-
-Run the notebooks
------------------
-
-- Navigate to one of the following paths under the Examples directory and launch your chosen Jupyter Notebook (`.ipynb` extension):
-
+#. Navigate to one of the following paths under the Examples directory and launch your chosen Jupyter Notebook (`.ipynb` extension):
   - `Examples/torch/quantization/`
   - `Examples/torch/compression/`
   - `Examples/tensorflow/quantization/keras/`
-- Follow the instructions therein to execute the code.
+#. Follow the instructions in the notebook to execute the code.
