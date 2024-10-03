@@ -59,7 +59,14 @@ from aimet_onnx import utils
 from models.models_for_tests import SingleResidual
 from models import models_for_tests, test_models
 from models.models_for_tests import build_dummy_model, single_residual_model, BNAfterConv, multi_input_with_constant_model , multi_output_model, custom_add_model, build_lstm_gru_dummy_model, \
-    transposed_conv_model, depthwise_transposed_conv_model, linear_split_into_matmul_add
+    transposed_conv_model, depthwise_transposed_conv_model, linear_split_into_matmul_add, _convert_to_onnx
+
+
+def _compare_encodings(src, dest):
+    return (src.min == dest.min and
+            src.max == dest.max and
+            src.delta == dest.delta and
+            src.offset == dest.offset)
 
 
 class DummyModel(SingleResidual):
@@ -1264,3 +1271,199 @@ class TestQuantSim:
             with open(os.path.join(tempdir, 'gather_model.encodings')) as json_file:
                 encoding_data = json.load(json_file)
                 assert 'gather_weight' not in encoding_data['activation_encodings'].keys()
+
+class TestEncodingPropagation:
+
+    def test_output(self):
+        """
+        Given: model as below
+
+                   +-> q_in1 -> conv1 -> relu1 ---> q_out1 -------v
+          [input] -+                                           concat -> q_out3 -> [output]
+                   +-> q_in2 -> conv2 -> relu2 ---> q_out2 -------^
+        """
+        class Model(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.conv1 = torch.nn.Conv2d(3,3,3)
+                self.relu1 = torch.nn.ReLU()
+                self.conv2 = torch.nn.Conv2d(3,3,3)
+                self.relu2 = torch.nn.ReLU()
+                self.cat = Concat()
+
+            def forward(self, x):
+                x1 = x2 = x
+                x1 = self.conv1(x1)
+                x1 = self.relu1(x1)
+                x2 = self.conv2(x2)
+                x2 = self.relu2(x2)
+                return self.cat(x1, x2)
+        """
+       When: Call propagate_output_encodings(op_types=(..., 'Concat'))
+
+       Then: q_out1 and q_out2 are replaced with q_out3 as below
+
+                  +-> q_in1 -> conv1 -> relu1 -> **q_out3** -----v
+         [input] -+                                           concat -> q_out3- > [output]
+                  +-> q_in2 -> conv2 -> relu2 -> **q_out3** -----^
+        """
+        pt_model = Model().eval()
+        x = torch.randn(1, 3, 24, 24)
+        model = _convert_to_onnx(pt_model, x)
+        dummy_input = make_dummy_input(model.model)
+        sim = QuantizationSimModel(model, dummy_input)
+
+        # tie the quantizers and calibrate
+        propagate_output_encodings(sim, op_types=('Concat',))
+        sim.compute_encodings(lambda session, _: session.run(None, dummy_input), None)
+        assert _compare_encodings(sim.qc_quantize_op_dict['/relu1/Relu_output_0'].encodings[0],
+                                  sim.qc_quantize_op_dict['output'].encodings[0])
+        assert _compare_encodings(sim.qc_quantize_op_dict['/relu2/Relu_output_0'].encodings[0],
+                                  sim.qc_quantize_op_dict['output'].encodings[0])
+
+    def test_math_invariant(self):
+        """
+        Given: model as below
+
+                   +-> q_in1 -> conv1 ---> relu1 -> q_out1 ------v
+          [input] -+                                          concat -> q_out2 -> [output]
+                   +-> q_in2 -> reshape -> permute --------------^
+        """
+        class Model(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.conv1 = torch.nn.Conv2d(3, 3, 3, padding=1)
+                self.relu1 = torch.nn.ReLU()
+                self.cat = Concat()
+
+            def forward(self, x):
+                x1 = x2 = x
+                x1 = self.conv1(x1)
+                x1 = self.relu1(x1)
+                x2 = torch.reshape(x2, (-1, 24, 24, 3))
+                x2 = torch.permute(x2, (0, 3, 1, 2))
+                return self.cat(x1, x2)
+        """
+        When: Call propagate_output_encodings(op_types=(..., 'Concat'))
+
+        Then: q_out1 and q_in2 are replaced with q_out3 as below
+
+                   +-> q_in1 -> conv1 ---> relu1 -----> **q_out2**- --------v
+          [input] -+                                                     concat -> q_out2 -> [output] 
+                   +-> **q_out2** -> reshape -> transpose -> permute -------^
+        """
+        pt_model = Model().eval()
+        dummy_input = torch.randn(1, 3, 24, 24)
+        model = _convert_to_onnx(pt_model, dummy_input)
+        dummy_input = make_dummy_input(model.model)
+        sim = QuantizationSimModel(model, dummy_input)
+
+        # tie the quantizers and calibrate
+        propagate_output_encodings(sim, op_types=('Concat',))
+        sim.compute_encodings(lambda session, _: session.run(None, dummy_input), None)
+
+        assert _compare_encodings(sim.qc_quantize_op_dict['/relu1/Relu_output_0'].encodings[0],
+                                  sim.qc_quantize_op_dict['output'].encodings[0])
+        assert _compare_encodings(sim.qc_quantize_op_dict['input'].encodings[0],
+                                  sim.qc_quantize_op_dict['output'].encodings[0])
+
+    def test_concat_tree(self):
+        """
+        Given: model as below
+
+                    +-> q_in1a -> conv1a -> q_out1a -> concat1 -> q_out1c -> reshape --+
+                    +-> q_in1b -> conv1b -> q_out1b ------^                            v
+          [input] --+                                                               concat3 -> q_out3 -> [output]
+                    +-> q_in2a -> conv2a -> q_out2a -> concat2 -> q_out2c -------------^
+                    +-> q_in2b -> conv2b -> q_out2b ------^
+        """
+        class Model(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.conv1a = torch.nn.Conv2d(3,3,3)
+                self.conv1b = torch.nn.Conv2d(3,3,3)
+                self.conv2a = torch.nn.Conv2d(3,3,3)
+                self.conv2b = torch.nn.Conv2d(3,3,3)
+
+            def forward(self, x):
+                x1a = x1b = x2a = x2b = x
+                x1a = self.conv1a(x1a)
+                x1b = self.conv1b(x1b)
+                x1 = torch.cat([x1a, x1b])
+                x1 = torch.reshape(x1, (-1, 22, 22, 3))
+                x1 = torch.permute(x1, (0, 3, 1, 2))
+                x2a = self.conv2a(x2a)
+                x2b = self.conv2b(x2b)
+                x2 = torch.cat([x2a, x2b])
+                return torch.cat([x1, x2])
+
+        pt_model = Model().eval()
+        dummy_input = torch.randn(1, 3, 24, 24)
+        model = _convert_to_onnx(pt_model, dummy_input)
+        dummy_input = make_dummy_input(model.model)
+        sim = QuantizationSimModel(model, dummy_input)
+        """
+        When: Call propagate_output_encodings(op_types=(..., 'Concat'))
+
+        Then: All q_out{*} are replaced with q_out3 as below
+
+                    +-> q_in1a -> conv1a -> *q_out3* -> concat1 -> *q_out3* -> reshape --+
+                    +-> q_in1b -> conv1b -> *q_out3* ------^                             v
+          [input] --+                                                                 concat3 -> q_out3 -> [output]
+                    +-> q_in2a -> conv2a -> *q_out3* -> concat2 -> *q_out3* -------------^
+                    +-> q_in2b -> conv2b -> *q_out3* ------^
+        """
+        # tie the quantizers and calibrate
+        propagate_output_encodings(sim, op_types=('Concat',))
+        sim.compute_encodings(lambda session, _: session.run(None, dummy_input), None)
+
+        for cg_op in sim.connected_graph.ordered_ops:
+            if cg_op.type in ['Conv', 'Concat']:
+                _, out_qtzr, __ = sim.get_op_quantizers(cg_op)
+                assert _compare_encodings(out_qtzr[0].encodings[0], sim.qc_quantize_op_dict['output'].encodings[0])
+
+    @pytest.mark.parametrize('op_type_under_test', [torch.nn.MaxPool2d, torch.nn.AvgPool2d, torch.nn.Upsample])
+    def test_output_parametrized(self, op_type_under_test):
+        """
+        Given: model as below
+           [input] -+-> q_in1 -> conv1 -> *q_out2* -> op_type_under_test -> q_out2 -> [output]
+        """
+        class Model(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.conv1 = torch.nn.Conv2d(3,3,3)
+                self.op_type_under_test = op_type_under_test(3)
+            def forward(self, x):
+                x1 = self.conv1(x)
+                return self.op_type_under_test(x1)
+        """
+       When: Call propagate_output_encodings(op_types=(..., 'op_type_under_test'))
+
+       Then: q_out1 will be replaced with q_out2 as below
+       
+             [input] -+-> q_in1 -> conv1 -> q_out1 -> op_type_under_test -> q_out2 -> [output]
+        
+        """
+        pt_model = Model().eval()
+        x = torch.randn(1, 3, 24, 24)
+        model = _convert_to_onnx(pt_model, x)
+        dummy_input = make_dummy_input(model.model)
+        sim = QuantizationSimModel(model, dummy_input)
+
+        if isinstance(pt_model.op_type_under_test, torch.nn.MaxPool2d):
+            op_type = "MaxPool"
+        elif isinstance(pt_model.op_type_under_test, torch.nn.AvgPool2d):
+            op_type = "AveragePool"
+        elif isinstance(pt_model.op_type_under_test, torch.nn.Upsample):
+            op_type = "Resize"
+        else:
+            raise ValueError(f"Unsupported op_type")
+
+        # tie the quantizers and calibrate
+        propagate_output_encodings(sim, op_types=op_type)
+        sim.compute_encodings(lambda session, _: session.run(None, dummy_input), None)
+
+        for cg_op in sim.connected_graph.ordered_ops:
+            if cg_op.type in ['Conv']:
+                _, out_qtzr, __ = sim.get_op_quantizers(cg_op)
+                assert _compare_encodings(out_qtzr[0].encodings[0], sim.qc_quantize_op_dict['output'].encodings[0])
