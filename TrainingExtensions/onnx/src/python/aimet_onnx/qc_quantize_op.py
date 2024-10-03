@@ -297,7 +297,7 @@ class QcQuantizeOp:
             if self.use_symmetric_encodings and is_unsigned_symmetric:
                 self.use_unsigned_symmetric = is_unsigned_symmetric
 
-        self.load_encodings(encoding)
+            self.load_encodings(encoding)
 
     def load_encodings(self, encoding: List[libpymo.TfEncoding]):
         """
@@ -307,6 +307,8 @@ class QcQuantizeOp:
         """
         assert isinstance(encoding, (list, tuple))
         assert len(encoding) == len(self._tensor_quantizer)
+        if self.data_type == QuantizationDataType.float:
+            raise RuntimeError(f"`load_encodings` is not supported for floating-point quantizers.")
         for tensor_quantizer in self._tensor_quantizer:
             tensor_quantizer.isEncodingValid = True
         self.op_mode = OpMode.quantizeDequantize
