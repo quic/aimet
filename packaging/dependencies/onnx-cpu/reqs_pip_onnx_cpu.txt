@@ -1,4 +1,4 @@
 cumm
 spconv
-torch -f https://download.pytorch.org/whl/cpu/torch
-torchvision -f https://download.pytorch.org/whl/cpu/torchvision
+torch
+torchvision

@@ -246,12 +246,14 @@ RUN python3 -m pip install bokeh==3.2.2 hvplot==0.9.2
 RUN python3 -m pip uninstall -y Pillow Pillow-SIMD
 RUN python3 -m pip --no-cache-dir install Pillow-SIMD==9.0.0.post1
 
-# Force-install the LATEST version of Python3 Torch Packages
+# Force-install the LATEST version of Python3 Torch Packages, then pin back some dependencies
 RUN unset PIP_CONFIG_FILE && \
     python3 -m pip install --upgrade --force-reinstall --isolated \
         torch -f https://download.pytorch.org/whl/cpu/torch \
         torchaudio -f https://download.pytorch.org/whl/cpu/torchaudio \
-        torchvision -f https://download.pytorch.org/whl/cpu/torchvision
+        torchvision -f https://download.pytorch.org/whl/cpu/torchvision \
+        numpy==1.24.4 \
+        fsspec[http]==2024.6.1
 
 RUN apt-get update && apt-get install -y gnupg2
 # Downloaded from https://apt.llvm.org/
