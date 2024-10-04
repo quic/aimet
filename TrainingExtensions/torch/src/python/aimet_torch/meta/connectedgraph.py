@@ -83,7 +83,8 @@ op_inputs_dict = {
 # When traced, the leaf level module for these ops may have ordering of inputs flipped. We trace into these modules in
 # order to determine the true input ordering.
 MULTI_INPUT_OPS_TO_PARSE = [aimet_modules.Add, aimet_modules.Multiply, aimet_modules.Subtract,
-                            aimet_modules.Divide, aimet_modules.Pow, aimet_modules.IndexSelect]
+                            aimet_modules.Divide, aimet_modules.Pow, aimet_modules.IndexSelect, aimet_modules.MatMul,
+                            aimet_modules.Concat, aimet_modules.Minimum, aimet_modules.DynamicConv2d]
 
 # We want to consider following operations as leaf nodes while creating op for connected graph.
 SKIP_LIST_FOR_SUBGRAPH_TRACE = [aimet_modules.StridedSlice, aimet_modules.GatherNd, aimet_modules.ScatterND,
