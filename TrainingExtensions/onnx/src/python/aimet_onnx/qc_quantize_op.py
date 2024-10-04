@@ -256,15 +256,26 @@ class QcQuantizeOp:
             tensor_quantizer.setUnsignedSymmetric(use_unsigned_symmetric)
         self._reset_encodings()
 
-    @property
-    def encodings(self) -> Optional[List[libpymo.TfEncoding]]:
+    def get_encodings(self) -> Optional[List[libpymo.TfEncoding]]:
         """
         Reads the encodings object from the node's QcQuantizeInfo
+
         :return: The libpymo.TfEncoding object used to store the node's quantization encoding
         """
         if not self.is_initialized() or self.data_type == QuantizationDataType.float:
             return None
         return self.quant_info.encoding
+
+    @property
+    @deprecated(f"Use {get_encodings.__qualname__} instead")
+    def encodings(self) -> Optional[List[libpymo.TfEncoding]]:
+        """Deprecated. Use :meth:`get_encodings` to set the quantizer encodings.
+
+        Reads the encodings object from the node's QcQuantizeInfo
+
+        :return: The libpymo.TfEncoding object used to store the node's quantization encoding
+        """
+        return self.get_encodings()
 
     def update_quantizer_and_load_encodings(self, encoding: List[libpymo.TfEncoding], is_symmetric: Optional[bool],
                                             is_strict_symmetric: Optional[bool], is_unsigned_symmetric: Optional[bool],
@@ -308,7 +319,7 @@ class QcQuantizeOp:
         assert isinstance(encoding, (list, tuple))
         assert len(encoding) == len(self._tensor_quantizer)
         if self.data_type == QuantizationDataType.float:
-            raise RuntimeError(f"`load_encodings` is not supported for floating-point quantizers.")
+            raise RuntimeError(f"{type(self).load_encodings.__qualname__} is not supported for floating-point quantizers.")
         for tensor_quantizer in self._tensor_quantizer:
             tensor_quantizer.isEncodingValid = True
         self.op_mode = OpMode.quantizeDequantize
@@ -422,7 +433,7 @@ class QcQuantizeOp:
         if self.quant_scheme != QuantScheme.post_training_tf_enhanced:
             raise RuntimeError("get_stats_histogram() can be invoked only when quantization scheme is TF-Enhanced.")
 
-        if not self.encodings:
+        if not self.get_encodings():
             raise RuntimeError("get_stats_histogram() can be invoked only when encoding is computed.")
 
         histogram = []
@@ -469,7 +480,7 @@ class QcQuantizeOp:
 
         if self.data_type == QuantizationDataType.int:
             encodings = []
-            for encoding in self.encodings:
+            for encoding in self.get_encodings():
                 enc_dict = dict(min=encoding.min,
                                 max=encoding.max,
                                 scale=encoding.delta,

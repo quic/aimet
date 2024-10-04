@@ -852,3 +852,10 @@ class TestBlockwiseQuantizeOp:
         assert len(encodings) == 1
         assert encodings[0]["dtype"] == "float"
         assert encodings[0]["bitwidth"] == 16
+
+    def test_load_float_encodings(self):
+        quant_info = libquant_info.QcQuantizeInfo()
+        qc_quantize_op = QcQuantizeOp(quant_info, bitwidth=16, op_mode=OpMode.quantizeDequantize)
+        qc_quantize_op.data_type = QuantizationDataType.float
+        with pytest.raises(RuntimeError):
+            qc_quantize_op.load_encodings([libpymo.TfEncoding()])
