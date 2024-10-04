@@ -933,7 +933,9 @@ class RmsNorm(torch.nn.Module):
         """
         Forward pass for RmsNorm
         """
+        input_dtype = x.dtype
+        x = x.to(dtype=torch.float32, copy=True)
         squared_mean = torch.mean(x * x, dim=self.axes, keepdim=True)
         rms = torch.sqrt(squared_mean + self.epsilon)
-        res = torch.div(x, rms) * self.weight + self.bias
+        res = (torch.div(x, rms) * self.weight + self.bias).to(dtype=input_dtype)
         return res
