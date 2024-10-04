@@ -5400,3 +5400,35 @@ def test_dynamic_conv2d_export():
     # Shouldn't throw error during export
     with tempfile.TemporaryDirectory() as tmp_dir:
         sim.export(tmp_dir, "dynamic_conv", dummy_input)
+
+
+
+@pytest.mark.parametrize("dtype", [QuantizationDataType.float, QuantizationDataType.int])
+def test_bool_quantization(dtype):
+    """With an actual leaf module"""
+
+    class Compare2Tensors(torch.nn.Module):
+        def __init__(self):
+            super(Compare2Tensors, self).__init__()
+
+        def forward(self, x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
+            return x == y
+
+    class MyModel(torch.nn.Module):
+        def __init__(self):
+            super(MyModel, self).__init__()
+            self.compare = Compare2Tensors()
+
+        def forward(self, x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
+            return self.compare(x, y)
+
+    def forward_pass(model, args):
+        model(*dummy_input)
+
+    dummy_input = torch.rand(1, 3, 12, 12), torch.rand(1, 3, 12, 12)
+    model = MyModel()
+    sim = QuantizationSimModel(model, dummy_input, default_output_bw=16, default_param_bw=16, default_data_type=dtype)
+
+    sim.compute_encodings(forward_pass, None)
+
+    assert sim.model.compare.output_quantizers[0].enabled == False
