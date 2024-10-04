@@ -1446,3 +1446,30 @@ class InnerLinear(nn.Module):
         x = self.in_linear1(inp)
         x = self.linear_modlist[0](x)
         return x
+
+
+class ModelWithMultiInputOps(torch.nn.Module):
+    def __init__(self):
+        super(ModelWithMultiInputOps, self).__init__()
+        self.conv = nn.Conv2d(3, 8, kernel_size=2, stride=2, padding=0, bias=False)
+        self.bn = nn.BatchNorm2d(8)
+        self.relu = nn.ReLU(inplace=True)
+        self.register_buffer('gemm_weight', torch.ones([1, 8, 12, 24], dtype=torch.float32))
+        self.matmul = aimet_modules.MatMul()
+        self.min = aimet_modules.Minimum()
+        self.register_buffer('constant', torch.ones([1, 8, 12, 12], dtype=torch.float32))
+        self.concat = aimet_modules.Concat()
+        self.register_buffer('conv_bias', torch.zeros([3], dtype=torch.float32))
+        self.dynamic_conv = aimet_modules.DynamicConv2d(stride=(1, 1), padding=(0, 0), dilation=(1, 1), groups=1)
+        self.fc = nn.Linear(24, 3)
+
+    def forward(self, inp, weight):
+        x1_conv = self.conv(inp)
+        x1_bn = self.bn(x1_conv)
+        x1 = self.relu(x1_bn)
+        x2 = self.matmul(x1, self.gemm_weight)
+        x3 = self.fc(x2)
+        x4 = self.min(self.constant, x1)
+        x5 = self.concat(x1_bn, self.constant, x1)
+        x6 = self.dynamic_conv(x5, weight, self.conv_bias)
+        return x3, x6+2, x4

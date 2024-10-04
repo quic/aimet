@@ -2293,3 +2293,26 @@ class TestQuantsimConfig:
                         assert isinstance(sim.model.conv1.param_quantizers['weight'], StaticGridPerChannelQuantizer)
                     else:
                         assert isinstance(sim.model.conv1.param_quantizers['weight'], StaticGridPerTensorQuantizer)
+
+    def test_input_order_exception_for_multi_input_ops_in_connected_graph(self):
+        model = test_models.ModelWithMultiInputOps()
+        model.eval()
+        dummy_input = (torch.randn(1, 3, 24, 24), torch.randn(3, 8, 2, 2))
+
+        sim = QuantizationSimModel(model, dummy_input)
+        # input order for the following ops must be preserved within
+        # connected graph for the quantizers to be properly enabled/disabled
+        # aimet_modules.Matmul
+        assert (not sim.model.matmul.input_quantizers[0].enabled
+                and sim.model.matmul.input_quantizers[1].enabled)
+        # aimet_modules.Minimum
+        assert (sim.model.min.input_quantizers[0].enabled
+                and not sim.model.min.input_quantizers[1].enabled)
+        # aimet_modules.Concat
+        assert (not sim.model.concat.input_quantizers[0].enabled
+                and sim.model.concat.input_quantizers[1].enabled
+                and not sim.model.concat.input_quantizers[2].enabled)
+        # aimet_modules.DynamicConv2d
+        assert (not sim.model.dynamic_conv.input_quantizers[0].enabled
+                and sim.model.dynamic_conv.input_quantizers[1].enabled
+                and sim.model.dynamic_conv.input_quantizers[2].enabled)
