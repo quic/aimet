@@ -486,6 +486,26 @@ class QuantizedAddmm(_DispatchMixin, QuantizationMixin, Addmm):
     _builtin_torch_fn = torch.addmm
 
 
+@QuantizationMixin.implements(RmsNorm)
+class QuantizedRmsNorm(QuantizationMixin, RmsNorm):
+    """Custom module for RmsNorm"""
+    # pylint: disable=arguments-differ
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """
+        Forward pass for RmsNorm
+        """
+        if self.input_quantizers[0]:
+            x = self.input_quantizers[0](x)
+
+        with self._patch_quantized_parameters():
+            out = super().forward(x)
+
+        if self.output_quantizers[0]:
+            out = self.output_quantizers[0](out)
+
+        return out
+
+
 # @QuantizationMixin.implements(Square)
 # class QuantizedSquare(_DispatchMixin, QuantizationMixin, Square):
 #     """ Quantized Square """

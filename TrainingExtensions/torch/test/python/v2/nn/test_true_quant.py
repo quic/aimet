@@ -954,6 +954,7 @@ def _create_quantized_module(module):
     # (lambda: custom.Normalize(),                    lambda: ...),
     # (lambda: custom.Pad(),                          lambda: ...),
     # (lambda: custom.GridSample(),                   lambda: ...),
+    (lambda: custom.RmsNorm([5, 2, 3], [2], 1e-5),    lambda: (randn(5, 2, 3)))
 ]))
 def test_default_kernels(module_factory, input_factory):
     module = module_factory()
