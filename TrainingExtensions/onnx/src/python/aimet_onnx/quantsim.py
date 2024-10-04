@@ -127,7 +127,8 @@ class QuantizationSimModel:
                  use_symmetric_encodings: bool = False, use_cuda: bool = True,
                  device: int = 0, config_file: str = None,
                  default_data_type: QuantizationDataType = QuantizationDataType.int,
-                 simplify_model: bool = True, user_onnx_libs: List[str] = None, path: str = None):
+                 simplify_model: bool = True, user_onnx_libs: List[str] = None,
+                 path: str = None, op_types_to_tie: Union[str, Tuple] = None):
         """
         Constructor
 
@@ -147,6 +148,7 @@ class QuantizationSimModel:
         :param simplify_model: Default True, uses onnx simplifier to simplify model
         :param user_onnx_libs: List of paths to all compiled ONNX custom ops libraries
         :param path: Directory to save the artifacts.
+        :param op_types_to_tie: Operator types for which to tie input and output quantizers
         """
         self.model = model
         if not isinstance(model, ONNXModel):
@@ -178,6 +180,7 @@ class QuantizationSimModel:
         else:
             self._op_domain = "aimet.customop.cpu"
             self.providers = ['CPUExecutionProvider']
+        self._op_types_to_tie = op_types_to_tie
         self._user_onnx_libs = user_onnx_libs
         self.param_names = []
         self.input_quantizers_name = []
@@ -186,25 +189,27 @@ class QuantizationSimModel:
         self._path = path if path else tempfile.mkdtemp()
         if not os.path.exists(self._path):
             os.makedirs(self._path, exist_ok=True)
+
+        # Get names of parameters and activations to quantize
         self._get_param_names()
         self._get_activations_to_quantize(dummy_input)
 
         # Disable bias quantization
         self._disable_bias_quantization()
-
         self._add_quantization_nodes()
 
-        self.session = QuantizationSimModel.build_session(self.model.model, self.providers,
-                                                          user_onnx_libs=self._user_onnx_libs, path=self._path)
+        # Apply configurations based on provided config file.
         quantsim_configurator = self._add_configuration_(config_file)
-
         self._hw_version = quantsim_configurator._get_hw_version()
         self._supported_kernels = quantsim_configurator.get_supported_kernels()
         self._op_to_supported_kernel = quantsim_configurator.get_op_to_supported_kernels()
-
         self.quant_args = extract_global_quantizer_args(quant_scheme, quantsim_configurator)
-
         self._apply_exception_rules()
+        self._tie_quantizers()
+
+        # Build onnxruntime inference session
+        self.session = QuantizationSimModel.build_session(self.model.model, self.providers,
+                                                          user_onnx_libs=self._user_onnx_libs, path=self._path)
 
     def get_supported_kernels(self) -> Dict:
         """
@@ -783,6 +788,99 @@ class QuantizationSimModel:
 
         return param_quantizers, activation_quantizers
 
+    def _tie_quantizers(self):
+        """
+        Tie the input and output quantizers for given op types.
+        """
+        if not self._op_types_to_tie:
+            return
+
+        op_types_to_tie = self._op_types_to_tie
+        cg = self.connected_graph
+
+        def _set_quant_info(dst_qtzr_node_name: str, src_qtzr: QcQuantizeOp):
+            """
+            Set quant_info attribute (pointer to the libquant_info object)
+
+            :param dst_qtzr_node_name: destination quantizer node name in graph.
+            :param src_qtzr: source quantizer.
+            """
+            for node in self.model.graph().node:
+                if node.op_type == 'QcQuantizeOp' and node.name == dst_qtzr_node_name:
+                    for atr in node.attribute:
+                        if atr.name == "quant_info":
+                            atr.i = libpymo.PtrToInt64(src_qtzr.quant_info)
+                            return
+
+        def _set_qtzr(dst_qtzr: QcQuantizeOp, src_qtzr: QcQuantizeOp):
+            """
+            Set the dst quantizer by src quantizer and update quant_info attribute (pointer to the libquant_info object)
+             in the graph node.
+
+            :param dst_qtzr: destination quantizer.
+            :param src_qtzr: source quantizer
+            """
+            for name, qtzr in self.qc_quantize_op_dict.items():
+                if dst_qtzr == qtzr:
+                    self.qc_quantize_op_dict[name] = src_qtzr
+                    dst_qtzr_node_name = 'QcQuantizeOp_' + name
+                    # update quant_info attribute (pointer to the libquant_info object) in the graph node.
+                    _set_quant_info(dst_qtzr_node_name, src_qtzr)
+                    return
+
+        def _set_src_qtzr(x: Product, consumer: Op, src_qtzr):
+            producer = x.producer
+
+            if not producer:
+                # ``x`` is a root input (i.e. has no producer).
+                # In this case, set the input quantizer of the consumer to ``src_qtzr``
+                i = consumer.inputs.index(x)
+                inp_qtzr, _, __ = self.get_op_quantizers(consumer)
+                if i >= len(inp_qtzr):
+                    return
+
+                _set_qtzr(dst_qtzr=inp_qtzr[i], src_qtzr=src_qtzr)
+                return
+
+            _, out_qtzr, __ = self.get_op_quantizers(producer)
+
+            if out_qtzr:
+                # There exists output quantizer associated with the graph node ``producer``
+                # In this case, set the output quantizer of the producer to ``src_qtzr`
+                outputs = [producer.output]
+                i = outputs.index(x)
+                _set_qtzr(dst_qtzr=out_qtzr[i], src_qtzr=src_qtzr)
+
+            if not out_qtzr or producer.type in op_outputs_to_ignore:
+                # 1. There is no output quantizer associated with the graph node ``producer``, or
+                # 2. op is a math invariant op (reshape, permute, etc.).
+                # In these cases, propagate encoding further to the ancestors
+                for inp in producer.inputs:
+                    _set_src_qtzr(inp, consumer=producer, src_qtzr=src_qtzr)
+
+        if isinstance(op_types_to_tie, str):
+            op_types_to_tie = (op_types_to_tie, )
+
+        for op in reversed(cg.ordered_ops):
+            if op.type not in op_types_to_tie:
+                continue
+
+            _, out_qtzr, __ = self.get_op_quantizers(op)
+
+            if not out_qtzr:
+                msg = 'Encoding propagation is only supported for ops with exactly ' \
+                      '1 output quantizer, but found output_quantizers[0] == []'
+                raise RuntimeError(msg)
+
+            if len(out_qtzr) != 1:
+                msg = 'Encoding propagation is only supported for ops with exactly ' \
+                      f'1 output quantizer, but found {len(out_qtzr)} ' \
+                      'output quantizers'
+                raise RuntimeError(msg)
+
+            for inp in op.inputs:
+                _set_src_qtzr(inp, consumer=op, src_qtzr=out_qtzr[0])
+
 
 def load_encodings_to_sim(quant_sim_model: QuantizationSimModel, onnx_encoding_path: str, strict=True) -> \
         List[EncodingMismatchInfo]:
@@ -1056,111 +1154,3 @@ def set_blockwise_quantization_for_weights(sim: QuantizationSimModel,
                     weight_quantizer.set_bitwidth(bitwidth)
                     weight_quantizer.use_symmetric_encodings = symmetric
                     weight_quantizer.data_type = QuantizationDataType.int
-
-
-def propagate_output_encodings(sim: QuantizationSimModel,
-                               op_types: Union[str, Tuple],
-                               ):
-    """
-    Propagate output encodings for given operator types by attaching the input and output quantizers.
-
-    :param sim: Quantsim to set activation quantizers for
-    :param op_types: Operator types for which to propagate output encodings
-
-    Examples:
-
-        >>> # Assume 'sim' is a QuantizationSimModel object and not calibrated.
-        >>> propagate_output_encodings(sim=sim,
-        ...                            op_types=("Concat", ))
-        >>> # Calibrate (compute encodings for each quantizers)
-        >>> sim.compute_encodings(...)
-
-    """
-    cg = sim.connected_graph
-
-    def _set_quant_info(dest_qtzr: QcQuantizeOp, src_qtzr: QcQuantizeOp):
-        """
-        sets tensor_quantizer in self._tensor_quantizer and passes a pointer to the tensor_quantizer object
-        to the C++ op's QcQuantInfo object from source quantizer to destination quantizer.
-
-        :param dest_qtzr: destination quantizer to be tied.
-        :param src_qtzr: source quantizer
-        """
-        # pylint: disable=protected-access
-        src_quant_info = src_qtzr.quant_info
-        des_quant_info = dest_qtzr.quant_info
-        # Set qc_quantize_op objects
-        # TODO (hitameht): Ideally, QcQuantizerOps.set_tensor_quantizer() method should take the list of tensor_quantizer and be able
-        #  to store in self._tensor_quantizer and save the tensor_quantizer reference to C++ object.
-        dest_qtzr._tensor_quantizer = src_qtzr._tensor_quantizer
-        des_quant_info.tensorQuantizerRef = [libpymo.PtrToInt64(qtzr) for qtzr in src_qtzr._tensor_quantizer]
-        dest_qtzr.op_mode = src_qtzr.op_mode
-        dest_qtzr.use_symmetric_encodings = src_qtzr.use_symmetric_encodings
-        dest_qtzr.data_type = src_qtzr.data_type
-        dest_qtzr.enabled = src_qtzr.enabled
-        dest_qtzr.bitwidth = src_qtzr.bitwidth
-        dest_qtzr._is_encoding_frozen = src_qtzr._is_encoding_frozen
-
-        # Set quant_info attributes which can't be set using qc_quantize_op object, these attributes are set to be consistent.
-        des_quant_info.isIntDataType = src_quant_info.isIntDataType
-        des_quant_info.channelAxis = src_quant_info.channelAxis
-        des_quant_info.blockAxis = src_quant_info.blockAxis
-        des_quant_info.blockSize = src_quant_info.blockSize
-        des_quant_info.name = src_quant_info.name
-
-        # Set attributes associated with tensor quantizer, these attributes are set to be consistent.
-        dest_qtzr.use_unsigned_symmetric = src_qtzr.use_unsigned_symmetric
-        dest_qtzr.use_strict_symmetric = src_qtzr.use_strict_symmetric
-
-    def _set_src_qtzr(x: Product, consumer: Op, src_qtzr):
-        producer = x.producer
-
-        if not producer:
-            # ``x`` is a root input (i.e. has no producer).
-            # In this case, set the input quantizer of the consumer to ``src_qtzr``
-            i = consumer.inputs.index(x)
-            inp_qtzr, _, __ = sim.get_op_quantizers(consumer)
-            if i >= len(inp_qtzr):
-                return
-
-            _set_quant_info(dest_qtzr=inp_qtzr[i], src_qtzr=src_qtzr)
-            return
-
-        _, out_qtzr, __ = sim.get_op_quantizers(producer)
-
-        if out_qtzr:
-            # There exists output quantizer associated with the graph node ``producer``
-            # In this case, set the output quantizer of the producer to ``src_qtzr`
-            outputs = [producer.output]
-            i = outputs.index(x)
-            _set_quant_info(dest_qtzr=out_qtzr[i], src_qtzr=src_qtzr)
-
-        if not out_qtzr or producer.type in op_outputs_to_ignore:
-            # 1. There is no output quantizer associated with the graph node ``producer``, or
-            # 2. op is a math invariant op (reshape, permute, etc).
-            # In these cases, propagate encoding further to the ancestors
-            for inp in producer.inputs:
-                _set_src_qtzr(inp, consumer=producer, src_qtzr=src_qtzr)
-
-    if isinstance(op_types, str):
-        op_types = (op_types, )
-
-    for op in reversed(cg.ordered_ops):
-        if op.type not in op_types:
-            continue
-
-        _, out_qtzr, __ = sim.get_op_quantizers(op)
-
-        if not out_qtzr:
-            msg = 'Encoding propagation is only supported for ops with exactly ' \
-                  '1 output quantizer, but found output_quantizers[0] == []'
-            raise RuntimeError(msg)
-
-        if len(out_qtzr) != 1:
-            msg = 'Encoding propagation is only supported for ops with exactly ' \
-                  f'1 output quantizer, but found {len(out_qtzr)} ' \
-                  'output quantizers'
-            raise RuntimeError(msg)
-
-        for inp in op.inputs:
-            _set_src_qtzr(inp, consumer=op, src_qtzr=out_qtzr[0])
