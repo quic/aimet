@@ -388,7 +388,10 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
         for module, _ in self._named_modules_to_tensor_quantizers_dict.items():
 
             onnx_types = map_torch_types_to_onnx.get(type(module))
-            backend_type = aimet_op_to_backend_op_name_map.get(module.__class__.__name__)
+            try:
+                backend_type = aimet_op_to_backend_op_name_map[module.__class__]
+            except KeyError:
+                backend_type = aimet_op_to_backend_op_name_map.get(module.__class__.__name__)
 
             if onnx_types and backend_type in op_configs and backend_type not in merged_backend_types:
                 backend_type_op_config = op_configs[backend_type]
@@ -411,7 +414,10 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
         for module, input_output_tensor_quantizers in self._named_modules_to_tensor_quantizers_dict.items():
             onnx_types = map_torch_types_to_onnx.get(type(module))
 
-            backend_type = aimet_op_to_backend_op_name_map.get(module.__class__.__name__)
+            try:
+                backend_type = aimet_op_to_backend_op_name_map[module.__class__]
+            except KeyError:
+                backend_type = aimet_op_to_backend_op_name_map.get(module.__class__.__name__)
 
             if backend_type in op_configs:
                 self._set_config_for_module(input_output_tensor_quantizers, op_configs[backend_type],
@@ -936,8 +942,12 @@ class DefaultOpInstanceConfigGenerator(OpInstanceConfigGenerator):
         :return: supported_kernels and per_channel_quantization fields
         """
         supported_kernels = []
-        if module.__class__.__name__ in aimet_op_to_backend_op_name_map:
-            supported_kernels = self.op_type_supported_kernels.get(aimet_op_to_backend_op_name_map[module.__class__.__name__])
+        if module.__class__ in aimet_op_to_backend_op_name_map:
+            try:
+                backend_type = aimet_op_to_backend_op_name_map[module.__class__]
+            except KeyError:
+                backend_type = aimet_op_to_backend_op_name_map.get(module.__class__.__name__)
+            supported_kernels = self.op_type_supported_kernels.get(backend_type)
 
         if not supported_kernels:
             supported_kernels = self.op_type_supported_kernels.get(op_type,
