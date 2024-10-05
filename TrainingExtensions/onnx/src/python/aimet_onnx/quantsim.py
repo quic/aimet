@@ -56,7 +56,7 @@ from packaging import version
 from aimet_common import libpymo
 from aimet_common import libquant_info
 from aimet_common.defs import QuantScheme, QuantizationDataType
-from aimet_common.quantsim import encoding_version, extract_global_quantizer_args
+from aimet_common.quantsim import encoding_version, extract_global_quantizer_args, VALID_ENCODING_VERSIONS
 from aimet_common.utils import save_json_yaml, AimetLogger
 from aimet_onnx import utils
 from aimet_onnx.meta.operations import Op
@@ -676,25 +676,35 @@ class QuantizationSimModel:
                 qc_op.compute_encodings()
             qc_op.op_mode = OpMode.quantizeDequantize
 
-    def _get_encodings(self, quantizer_names) -> Dict:
+    def _get_encodings(self, quantizer_names, enc_version):
         encoding_dict = {}
         for name in quantizer_names:
-            encoding = self.qc_quantize_op_dict[name].export_encodings(encoding_version)
+            encoding = self.qc_quantize_op_dict[name].export_encodings(enc_version)
             if encoding is None:
                 continue
             encoding_dict[name] = encoding
-        return encoding_dict
 
-    def _export_encodings(self, encoding_file_path):
+        if version.parse(enc_version) < version.parse("1.0.0"):
+            return encoding_dict
+
+        for name, encoding in encoding_dict.items():
+            encoding["name"] = name
+        return list(encoding_dict.values())
+
+    def _export_encodings(self, encoding_file_path, enc_version):
         """
         Export encodings to json and yaml file
 
         :param encoding_file_path: path to save the encoding files
         """
-        param_encodings = self._get_encodings(self.param_names)
-        activation_encodings = self._get_encodings(self.activation_names)
+        if enc_version not in VALID_ENCODING_VERSIONS:
+            raise NotImplementedError(f'Encoding version {enc_version} not in set of valid encoding '
+                                      f'versions {VALID_ENCODING_VERSIONS}.')
 
-        encodings_dict = {'version': encoding_version,
+        param_encodings = self._get_encodings(self.param_names, enc_version)
+        activation_encodings = self._get_encodings(self.activation_names, enc_version)
+
+        encodings_dict = {'version': enc_version,
                           'activation_encodings': activation_encodings,
                           'param_encodings': param_encodings,
                           'quantizer_args': self.quant_args}
@@ -733,7 +743,7 @@ class QuantizationSimModel:
         :param path: dir to save encoding files
         :param filename_prefix: filename to save encoding files
         """
-        self._export_encodings(os.path.join(path, filename_prefix) + '.encodings')
+        self._export_encodings(os.path.join(path, filename_prefix) + '.encodings', encoding_version)
         self.remove_quantization_nodes()
         if self.model.model.ByteSize() >= onnx.checker.MAXIMUM_PROTOBUF:
             # Note: Saving as external data mutates the saved model, removing all initializer data

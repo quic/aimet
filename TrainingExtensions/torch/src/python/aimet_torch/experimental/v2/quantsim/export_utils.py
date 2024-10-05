@@ -36,27 +36,16 @@
 # =============================================================================
 """ Export utilities for QuantizationSimModel """
 
-from enum import Enum
 import json
 import os
 from typing import Dict, List, Tuple
 
 from aimet_common.utils import AimetLogger
-from aimet_common.defs import QuantizationDataType
+from aimet_common.defs import QuantizationDataType, EncodingType
 from aimet_torch.utils import is_vector_encoding
 
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
-
-VALID_ENCODING_VERSIONS = {'0.6.1', '1.0.0'}
-
-class EncodingType(Enum):
-    """ Encoding type """
-    PER_TENSOR = 0
-    PER_CHANNEL = 1
-    PER_BLOCK = 2
-    LPBQ = 3
-    VECTOR = 4
 
 def _export_to_1_0_0(path: str,
                      filename_prefix: str,

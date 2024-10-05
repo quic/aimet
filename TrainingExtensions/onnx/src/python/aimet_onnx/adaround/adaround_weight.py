@@ -53,6 +53,7 @@ from aimet_common.defs import QuantScheme, QuantizationDataType
 
 from aimet_onnx.adaround.adaround_loss import AdaroundHyperParameters
 from aimet_onnx.adaround.adaround_tensor_quantizer import AdaroundTensorQuantizer
+from aimet_onnx import quantsim
 from aimet_onnx.quantsim import QuantizationSimModel
 from aimet_onnx.qc_quantize_op import OpMode
 from aimet_onnx.meta.utils import get_module_act_func_pair, get_ordered_ops
@@ -335,7 +336,7 @@ class Adaround:
         :param quant_sim: QunatSim that contains the model and Adaround tensor quantizers
         """
         # pylint: disable=protected-access
-        param_encodings = quant_sim._get_encodings(quant_sim.param_names)
+        param_encodings = quant_sim._get_encodings(quant_sim.param_names, quantsim.encoding_version)
 
         # export encodings to JSON file
         os.makedirs(os.path.abspath(path), exist_ok=True)

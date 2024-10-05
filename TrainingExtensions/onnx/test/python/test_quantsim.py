@@ -35,6 +35,8 @@
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
 
+import contextlib
+import itertools
 import json
 import os
 import tempfile
@@ -46,8 +48,9 @@ import onnx
 import onnxruntime as ort
 import pytest
 
+from aimet_onnx import quantsim
 from aimet_common import libquant_info
-from aimet_common.defs import QuantScheme, QuantizationDataType
+from aimet_common.defs import QuantScheme, QuantizationDataType, EncodingType
 from aimet_common.quantsim_config.utils import get_path_for_per_channel_config
 from aimet_onnx.quantsim import QuantizationSimModel, load_encodings_to_sim, set_blockwise_quantization_for_weights
 from aimet_onnx.qc_quantize_op import OpMode
@@ -102,6 +105,15 @@ class DummyModel(SingleResidual):
         x = self.fc(x)
 
         return x
+
+@contextlib.contextmanager
+def set_encoding_version(version):
+    old_version = quantsim.encoding_version
+    quantsim.encoding_version = version
+
+    yield
+
+    quantsim.encoding_version = old_version
 
 class TestQuantSim:
     """Tests for QuantizationSimModel"""
@@ -224,6 +236,42 @@ class TestQuantSim:
             for param in param_keys:
                 param_encodings_keys = list(encoding_data["param_encodings"][param][0].keys())
                 assert param_encodings_keys == ['bitwidth', 'dtype', 'is_symmetric', 'max', 'min', 'offset', 'scale']
+
+    def test_export_model_1_0_0(self):
+        """Test to export encodings and model in 1.0.0 format"""
+        model = build_dummy_model()
+        with tempfile.TemporaryDirectory() as tempdir:
+            sim = QuantizationSimModel(model, path=tempdir, config_file=get_path_for_per_channel_config())
+
+            def dummy_callback(session, _):
+                session.run(None, make_dummy_input(model))
+
+            sim.compute_encodings(dummy_callback, None)
+            with set_encoding_version("1.0.0"):
+                sim.export(tempdir, 'quant_sim_model')
+
+            with open(os.path.join(tempdir, 'quant_sim_model.encodings'), 'rb') as json_file:
+                encoding_data = json.load(json_file)
+
+            assert encoding_data["version"] == "1.0.0"
+            assert isinstance(encoding_data["activation_encodings"], list)
+            assert isinstance(encoding_data["param_encodings"], list)
+
+            activation_keys = {enc["name"] for enc in encoding_data["activation_encodings"]}
+            param_keys = {enc["name"] for enc in encoding_data["param_encodings"]}
+            assert activation_keys == {'4', '5', 'input', 'output'}
+            assert param_keys == {'conv_w', 'fc_w'}
+
+            for enc in itertools.chain(encoding_data["param_encodings"], encoding_data["activation_encodings"]):
+                assert isinstance(enc, dict)
+                assert enc.keys() == {"name", "enc_type", "dtype", "bw", "is_sym", "scale", "offset"}
+                assert isinstance(enc["scale"], list)
+                assert enc["dtype"] == "INT"
+                # Gemm layers do not use per-channel in the default_per_channel_config
+                if enc["name"] == "conv_w":
+                    assert enc["enc_type"] == EncodingType.PER_CHANNEL.name
+                else:
+                    assert enc["enc_type"] == EncodingType.PER_TENSOR.name
 
     def test_lstm_gru(self):
         """Test for LSTM and GRU dummy model"""

@@ -399,3 +399,11 @@ class CallbackFunc:
         """
         self.func = func
         self.args = func_callback_args
+
+class EncodingType(Enum):
+    """ Encoding type """
+    PER_TENSOR = 0
+    PER_CHANNEL = 1
+    PER_BLOCK = 2
+    LPBQ = 3
+    VECTOR = 4
