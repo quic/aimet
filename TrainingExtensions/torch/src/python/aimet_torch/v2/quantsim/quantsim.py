@@ -73,13 +73,23 @@ class QuantizationSimModel(V1QuantizationSimModel):
     def __init__(self, # pylint: disable=too-many-arguments
                  model: torch.nn.Module,
                  dummy_input: Union[torch.Tensor, Tuple],
-                 quant_scheme: Union[str, QuantScheme] = QuantScheme.post_training_tf_enhanced,
+                 quant_scheme: Union[str, QuantScheme] = None, # NOTE: Planned to be deprecated
                  rounding_mode: Optional[str] = None, # NOTE: Planned to be deprecated
                  default_output_bw: int = 8,
                  default_param_bw: int = 8,
                  in_place: bool = False,
                  config_file: Optional[str] = None,
                  default_data_type: QuantizationDataType = QuantizationDataType.int):
+        if not quant_scheme:
+            old_default = QuantScheme.post_training_tf_enhanced
+            new_default = QuantScheme.training_range_learning_with_tf_init
+            msg = _red(f"The default value of 'quant_scheme' will change from '{old_default}' "
+                       f"to '{new_default}' in the later versions. "
+                       "If you wish to maintain the legacy behavior in the future, "
+                       f"please explicitly pass 'quant_scheme={old_default}'")
+            warnings.warn(msg, DeprecationWarning, stacklevel=2)
+            quant_scheme = old_default
+
         if rounding_mode:
             if rounding_mode == 'nearest':
                 warnings.warn(_red("Passing rounding_mode='nearest' is no longer needed "\
