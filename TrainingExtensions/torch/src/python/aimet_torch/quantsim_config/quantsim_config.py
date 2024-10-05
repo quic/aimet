@@ -942,11 +942,11 @@ class DefaultOpInstanceConfigGenerator(OpInstanceConfigGenerator):
         :return: supported_kernels and per_channel_quantization fields
         """
         supported_kernels = []
-        if module.__class__ in aimet_op_to_backend_op_name_map:
+        if (module.__class__ in aimet_op_to_backend_op_name_map) or (module.__class__.__name__ in aimet_op_to_backend_op_name_map):
             try:
                 backend_type = aimet_op_to_backend_op_name_map[module.__class__]
             except KeyError:
-                backend_type = aimet_op_to_backend_op_name_map.get(module.__class__.__name__)
+                backend_type = aimet_op_to_backend_op_name_map[module.__class__.__name__]
             supported_kernels = self.op_type_supported_kernels.get(backend_type)
 
         if not supported_kernels:
