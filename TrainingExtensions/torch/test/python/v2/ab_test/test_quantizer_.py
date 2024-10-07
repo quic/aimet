@@ -3195,7 +3195,7 @@ class TestQuantizationSimLearnedGrid:
 
             with open(f'{tmp_dir}/cust_v2_simple.encodings') as json_file:
                 activation_encodings = json.load(json_file)['activation_encodings']
-                assert len(activation_encodings) == 6
+                assert len(activation_encodings) == 7
 
             module_names = { module_name for module_name, _ in cust_model.named_modules()}
             onnx_model = onnx.load(f'{tmp_dir}/cust_v2_simple.onnx')
