@@ -1119,6 +1119,36 @@ class TestQuantsim:
         assert (sim.model.module.input_quantizers[1] is None) == all(dim == 1 for dim in input_shape)
 
 
+    def test_quantize_constant_python_float(self):
+        """ Test that model input quantizers are enabled correctly when using different constant types """
+        dummy_input = torch.randn(2, 1)
+
+        """
+        Given: A model with python float constant
+        When: Instantiate quantsim and run compute_encodings
+        Then: 1. The input quantizer quantizing buffer constant should be enabled
+              2. The max value of quantizer should be the constant value
+        """
+                
+        class PythonFloatModel(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.module = custom.Add()
+
+            def forward(self, *inputs):
+                x = self.module(inputs[0], 2.0)
+                return x
+
+        model = PythonFloatModel()
+        sim = QuantizationSimModel(model, quant_scheme=QuantScheme.post_training_tf,
+                                    dummy_input=dummy_input, in_place=True)
+        sim.compute_encodings(lambda m, d: m(d), dummy_input)
+        sim.model(dummy_input)
+
+        assert sim.model.module.input_quantizers[1] is not None
+        assert sim.model.module.input_quantizers[1].get_max().item() == 2.0
+
+
 class TestQuantsimUtilities:
 
     def test_populate_marker_map(self):
