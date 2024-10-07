@@ -186,7 +186,7 @@ def test_resnet18():
     Then: The onnx model should produce output close enough to the original pytorch model
     """
     x = torch.randn(1, 3, 224, 224)
-    model = resnet18(pretrained=True).eval()
+    model = resnet18(pretrained=False).eval()
     model = QuantizationSimModel(model, x).model
 
     with aimet.nn.compute_encodings(model):
