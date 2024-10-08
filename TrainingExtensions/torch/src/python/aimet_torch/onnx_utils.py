@@ -1044,7 +1044,7 @@ class OnnxSaver:
         if param_name_to_updated_name is None:
             param_name_to_updated_name = {}
 
-        # Remove 'marked_module' from input and output field of onnx.GraphProto
+        # Remove 'marked_module' string from input and output field of onnx.GraphProto
         for inp in onnx_graph.input:
             updated_name = cls._get_updated_name(inp.name)
             inp.name = updated_name
@@ -1052,7 +1052,7 @@ class OnnxSaver:
             updated_name = cls._get_updated_name(out.name)
             out.name = updated_name
 
-        # Remove 'marked_module' from all node's input and output names.
+        # Remove 'marked_module' string from all node's input and output names.
         for node in onnx_graph.node:
             for index, param_name in enumerate(node.output):
                 updated_name = cls._get_updated_name(param_name)
