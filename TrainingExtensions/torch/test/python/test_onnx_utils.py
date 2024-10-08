@@ -34,6 +34,7 @@
 #
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
+
 import contextlib
 import copy
 import logging
@@ -1089,3 +1090,41 @@ class TestOnnxUtils:
         assert (
             param_name_to_updated_name[param_name] == '/down_blocks.0/Add_1/Add_output_0_dup1'
         )
+
+    def test_node_names(self):
+        """ Check if the 'marked_module' string is removed correctly """
+        class Model(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.conv1 = torch.nn.Conv2d(3, 3, 3)
+
+            def forward(self, x):
+                return self.conv1(x)
+
+
+        pt_model = Model().eval()
+        dummy_input = torch.randn(1, 3, 24, 24)
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            torch.onnx.export(pt_model.eval(),
+                              dummy_input,
+                              os.path.join(tmp_dir, "model.onnx"),
+                              training=torch.onnx.TrainingMode.EVAL,
+                              export_params=True,
+                              input_names=['input'],
+                              output_names=['output'])
+            model = onnx.load_model(os.path.join(tmp_dir, "model.onnx"))
+
+            # Add 'marked_module' string in input and output field of onnx.GraphProto object.
+            model.graph.input[0].name = model.graph.input[0].name + '/marked_module'
+            model.graph.output[0].name = model.graph.input[0].name + '/marked_module'
+
+            # An exception should be raised since the node input/output names are not consistent.
+            from onnx.checker import ValidationError
+            with pytest.raises(ValidationError):
+                onnx.checker.check_model(model)
+
+            # Remove the 'marked_module' string
+            OnnxSaver._remove_marked_module_string_from_node_inp_out_names(model.graph)
+
+            # model should be consistent.
+            onnx.checker.check_model(model)
