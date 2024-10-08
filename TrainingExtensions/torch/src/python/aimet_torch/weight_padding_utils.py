@@ -43,7 +43,7 @@ from aimet_common.defs import MAP_ROUND_MODE_TO_PYMO, MAP_QUANT_SCHEME_TO_PYMO
 from aimet_common.quantsim import recompute_grid_params
 
 from aimet_torch.tensor_quantizer import TensorQuantizer
-from aimet_torch.quantsim import QuantizationSimModel
+from aimet_torch.v1.quantsim import QuantizationSimModel
 
 
 class WeightPaddingParams:

@@ -45,7 +45,7 @@ from torchvision import models
 
 from aimet_torch.model_preparer import prepare_model
 from aimet_torch.model_validator.model_validator import ModelValidator
-from aimet_torch.quantsim import QuantizationSimModel as QuantizationSimModelV1
+from aimet_torch.v1.quantsim import QuantizationSimModel as QuantizationSimModelV1
 from aimet_torch.v2.quantsim import QuantizationSimModel as QuantizationSimModelV2
 from aimet_torch.layer_output_utils import NamingScheme, LayerOutputUtil, LayerOutput
 from aimet_torch.utils import is_leaf_module

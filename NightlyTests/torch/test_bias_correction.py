@@ -46,7 +46,7 @@ from aimet_common.defs import QuantScheme
 import aimet_torch.bias_correction
 import aimet_torch.layer_selector
 from aimet_torch import bias_correction
-from aimet_torch.quantsim import QuantParams
+from aimet_torch.v1.quantsim import QuantParams
 from aimet_torch import batch_norm_fold
 from aimet_torch import bias_correction as bc
 from models.mobilenet import MobileNetV2

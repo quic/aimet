@@ -51,7 +51,7 @@ from aimet_torch.qc_quantize_op import StaticGridQuantWrapper, LearnedGridQuantW
 from aimet_torch.tensor_quantizer import LearnedGridTensorQuantizer
 from aimet_torch.tensor_quantizer import StaticGridPerTensorQuantizer, QuantizeDequantizeFunc
 from aimet_torch import utils
-import aimet_torch.nn.modules.custom as aimet_modules
+import aimet_torch.v1.nn.modules.custom as aimet_modules
 
 
 class TestQcQuantizeOpStaticGrid:

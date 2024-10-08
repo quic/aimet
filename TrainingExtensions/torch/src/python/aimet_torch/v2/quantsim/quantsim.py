@@ -44,8 +44,8 @@ import contextlib
 import torch
 
 from aimet_common.defs import QuantScheme, QuantizationDataType
-from aimet_torch.quantsim import QuantizationSimModel as V1QuantizationSimModel, logger
-import aimet_torch.quantsim as quantsim_v1
+from aimet_torch.v1.quantsim import QuantizationSimModel as V1QuantizationSimModel, logger
+import aimet_torch.v1.quantsim as quantsim_v1
 from aimet_torch.v2 import nn as aimet_nn
 from aimet_torch.v2.nn import QuantizationMixin
 from aimet_torch.v2.nn import BaseQuantizationMixin

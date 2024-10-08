@@ -49,7 +49,7 @@ import torch
 from torch.utils.data import Dataset, DataLoader
 from bs4 import BeautifulSoup
 
-from aimet_torch.auto_quant import AutoQuantWithAutoMixedPrecision as AutoQuant
+from aimet_torch.v1.auto_quant import AutoQuantWithAutoMixedPrecision as AutoQuant
 from aimet_torch.qc_quantize_op import StaticGridQuantWrapper, QcQuantizeWrapper
 from aimet_torch.amp.mixed_precision_algo import GreedyMixedPrecisionAlgo
 from aimet_common.defs import QuantizationDataType
@@ -355,11 +355,11 @@ def patch_ptq_techniques(bn_folded_acc, cle_acc, adaround_acc, amp_final_acc,
         apply_adaround: MagicMock
         GreedyMixedPrecisionAlgo: MagicMock
 
-    with patch("aimet_torch.auto_quant.QuantizationSimModel", side_effect=_QuantizationSimModel) as mock_qsim,\
-            patch("aimet_torch.auto_quant.fold_all_batch_norms", side_effect=bn_folding) as mock_bn_folding,\
-            patch("aimet_torch.auto_quant.equalize_model", side_effect=cle) as mock_cle,\
-            patch("aimet_torch.auto_quant.Adaround._apply_adaround", side_effect=adaround) as mock_adaround,\
-            patch("aimet_torch.auto_quant.GreedyMixedPrecisionAlgo", side_effect=_GreedyMixedPrecisionAlgo) as mock_amp:
+    with patch("aimet_torch.v1.auto_quant.QuantizationSimModel", side_effect=_QuantizationSimModel) as mock_qsim,\
+            patch("aimet_torch.v1.auto_quant.fold_all_batch_norms", side_effect=bn_folding) as mock_bn_folding,\
+            patch("aimet_torch.v1.auto_quant.equalize_model", side_effect=cle) as mock_cle,\
+            patch("aimet_torch.v1.auto_quant.Adaround._apply_adaround", side_effect=adaround) as mock_adaround,\
+            patch("aimet_torch.v1.auto_quant.GreedyMixedPrecisionAlgo", side_effect=_GreedyMixedPrecisionAlgo) as mock_amp:
         try:
             yield Mocks(
                 eval_callback=mock_eval_callback,
@@ -379,8 +379,8 @@ def patch_dependencies():
         import bokeh.model
         return MagicMock(bokeh.model.Model())
 
-    with patch("aimet_torch.auto_quant.create_pareto_curve", side_effect=bokeh_model_factory),\
-            patch("aimet_torch.auto_quant.create_sensitivity_plot", side_effect=bokeh_model_factory):
+    with patch("aimet_torch.v1.auto_quant.create_pareto_curve", side_effect=bokeh_model_factory),\
+            patch("aimet_torch.v1.auto_quant.create_sensitivity_plot", side_effect=bokeh_model_factory):
          yield
 
 
@@ -595,7 +595,7 @@ class TestAutoQuant:
                                        strict_validation=False)
                 auto_quant.set_mixed_precision_params(candidates=[_W8A8, _W8A16, _FP16])
 
-                with patch("aimet_torch.auto_quant.prepare_model", side_effect=error_fn):
+                with patch("aimet_torch.v1.auto_quant.prepare_model", side_effect=error_fn):
                     # If prepare_model fails, should return AMP results
                     _, acc, _, _ = auto_quant.optimize(allowed_accuracy_drop)
                     assert acc == amp_acc
@@ -618,7 +618,7 @@ class TestAutoQuant:
                                        strict_validation=False)
                 auto_quant.set_mixed_precision_params(candidates=[_W8A8, _W8A16, _FP16])
 
-                with patch("aimet_torch.auto_quant.fold_all_batch_norms", side_effect=error_fn):
+                with patch("aimet_torch.v1.auto_quant.fold_all_batch_norms", side_effect=error_fn):
                     # If batchnorm folding fails, should return AMP results
                     _, acc, _, _ = auto_quant.optimize(allowed_accuracy_drop)
                     assert acc == amp_acc
@@ -640,7 +640,7 @@ class TestAutoQuant:
                                        strict_validation=False)
                 auto_quant.set_mixed_precision_params(candidates=[_W8A8, _W8A16, _FP16])
 
-                with patch("aimet_torch.auto_quant.equalize_model", side_effect=error_fn):
+                with patch("aimet_torch.v1.auto_quant.equalize_model", side_effect=error_fn):
                     # If CLE fails, should return AMP results
                     _, acc, _, _ = auto_quant.optimize(allowed_accuracy_drop)
                     assert acc == amp_acc
@@ -662,7 +662,7 @@ class TestAutoQuant:
                                        strict_validation=False)
                 auto_quant.set_mixed_precision_params(candidates=[_W8A8, _W8A16, _FP16])
 
-                with patch("aimet_torch.auto_quant.Adaround._apply_adaround", side_effect=error_fn):
+                with patch("aimet_torch.v1.auto_quant.Adaround._apply_adaround", side_effect=error_fn):
                     # If adaround fails, should return AMP results
                     _, acc, _, _ = auto_quant.optimize(allowed_accuracy_drop)
                     assert acc == amp_acc
@@ -684,7 +684,7 @@ class TestAutoQuant:
                                        strict_validation=False)
                 auto_quant.set_mixed_precision_params(candidates=[_W8A8, _W8A16, _FP16])
 
-                with patch("aimet_torch.auto_quant.GreedyMixedPrecisionAlgo", side_effect=error_fn):
+                with patch("aimet_torch.v1.auto_quant.GreedyMixedPrecisionAlgo", side_effect=error_fn):
                     # If AMP fails, should return adaround results
                     _, acc, _, _ = auto_quant.optimize(allowed_accuracy_drop)
                     assert acc == adaround_acc
@@ -706,10 +706,10 @@ class TestAutoQuant:
                                        strict_validation=False)
                 auto_quant.set_mixed_precision_params(candidates=[_W8A8, _W8A16, _FP16])
 
-                with patch("aimet_torch.auto_quant.fold_all_batch_norms", side_effect=error_fn),\
-                        patch("aimet_torch.auto_quant.equalize_model", side_effect=error_fn),\
-                        patch("aimet_torch.auto_quant.Adaround._apply_adaround", side_effect=error_fn),\
-                        patch("aimet_torch.auto_quant.GreedyMixedPrecisionAlgo", side_effect=error_fn):
+                with patch("aimet_torch.v1.auto_quant.fold_all_batch_norms", side_effect=error_fn),\
+                        patch("aimet_torch.v1.auto_quant.equalize_model", side_effect=error_fn),\
+                        patch("aimet_torch.v1.auto_quant.Adaround._apply_adaround", side_effect=error_fn),\
+                        patch("aimet_torch.v1.auto_quant.GreedyMixedPrecisionAlgo", side_effect=error_fn):
                     # If everything fails, should raise an error
                     with pytest.raises(RuntimeError):
                         auto_quant.optimize(allowed_accuracy_drop)
@@ -731,7 +731,7 @@ class TestAutoQuant:
                                        strict_validation=True)
                 auto_quant.set_mixed_precision_params(candidates=[_W8A8, _W8A16, _FP16])
 
-                with patch("aimet_torch.auto_quant.Adaround._apply_adaround", side_effect=error_fn):
+                with patch("aimet_torch.v1.auto_quant.Adaround._apply_adaround", side_effect=error_fn):
                     # Hard stop
                     with pytest.raises(_Exception):
                         auto_quant.optimize(allowed_accuracy_drop)

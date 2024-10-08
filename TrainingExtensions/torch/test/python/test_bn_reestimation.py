@@ -39,7 +39,7 @@ from unittest.mock import patch
 from torch.nn.modules.batchnorm import _BatchNorm
 from aimet_torch.qc_quantize_op import StaticGridQuantWrapper
 import pytest
-from aimet_torch.quantsim import QuantizationSimModel
+from aimet_torch.v1.quantsim import QuantizationSimModel
 from aimet_torch.tensor_quantizer import StaticGridTensorQuantizer, LearnedGridTensorQuantizer
 from aimet_common.defs import QuantScheme
 from aimet_torch.bn_reestimation import reestimate_bn_stats, _get_active_bn_modules

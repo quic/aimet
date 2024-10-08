@@ -95,7 +95,7 @@ def quantize_and_finetune_example():
 
     # Create Quantization Simulation Model
     from aimet_common.defs import QuantScheme
-    from aimet_torch.quantsim import QuantizationSimModel
+    from aimet_torch.v1.quantsim import QuantizationSimModel
     input_shape = (1, 3, 224, 224)
     dummy_input = torch.randn(input_shape).cuda()
 

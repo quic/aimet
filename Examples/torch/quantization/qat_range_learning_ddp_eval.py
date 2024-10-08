@@ -64,7 +64,7 @@ import torchvision.datasets as datasets
 import torchmetrics
 
 from aimet_common.defs import QuantScheme
-from aimet_torch.quantsim import QuantizationSimModel
+from aimet_torch.v1.quantsim import QuantizationSimModel
 from aimet_torch import quantsim
 from aimet_torch import batch_norm_fold
 from aimet_torch.model_preparer import prepare_model

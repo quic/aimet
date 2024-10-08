@@ -47,8 +47,8 @@ from aimet_torch.batch_norm_fold import fold_all_batch_norms
 from models.test_models import TinyModel
 from aimet_torch.tensor_quantizer import TensorQuantizer
 from aimet_torch.qc_quantize_op import QcQuantizeWrapper
-from aimet_torch.quantsim import QuantizationSimModel
-from aimet_torch.quant_analyzer import QuantAnalyzer, CallbackFunc
+from aimet_torch.v1.quantsim import QuantizationSimModel
+from aimet_torch.v1.quant_analyzer import QuantAnalyzer, CallbackFunc
 
 
 def calibrate(model: torch.nn.Module, dummy_input: torch.Tensor):

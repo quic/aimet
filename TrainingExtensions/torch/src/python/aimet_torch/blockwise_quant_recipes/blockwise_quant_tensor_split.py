@@ -38,8 +38,8 @@
 
 import torch
 from aimet_torch import utils
-import aimet_torch.nn.modules.custom as aimet_modules
-from aimet_torch.quantsim import QuantizationSimModel
+import aimet_torch.v1.nn.modules.custom as aimet_modules
+from aimet_torch.v1.quantsim import QuantizationSimModel
 
 
 class BlockwiseLinear(torch.nn.Module):

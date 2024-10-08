@@ -52,7 +52,7 @@ import json
 
 from aimet_torch.mixed_precision import choose_mixed_precision
 from aimet_common.defs import QuantizationDataType, CallbackFunc
-from aimet_torch.quantsim import QuantizationSimModel
+from aimet_torch.v1.quantsim import QuantizationSimModel
 from aimet_torch.model_preparer import prepare_model
 from aimet_torch.batch_norm_fold import fold_all_batch_norms
 from aimet_torch.amp import utils as mixed_precision_utils

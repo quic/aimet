@@ -46,11 +46,11 @@ from scipy import ndimage
 from torch import nn as nn
 from torchvision.ops import roi_align
 
-import aimet_torch.nn.modules.custom as aimet_elementwise
-import aimet_torch.nn.modules.custom as aimet_modules
+import aimet_torch.v1.nn.modules.custom as aimet_elementwise
+import aimet_torch.v1.nn.modules.custom as aimet_modules
 
 # pylint: disable=too-many-instance-attributes
-from aimet_torch.nn.modules.custom import Multiply
+from aimet_torch.v1.nn.modules.custom import Multiply
 
 
 class ModelWithMatMul(torch.nn.Module):

@@ -56,7 +56,7 @@ from deepspeed.runtime.engine import DeepSpeedEngine
 from deepspeed.inference.engine import InferenceEngine
 from tqdm import tqdm
 
-from aimet_torch.quantsim import QuantizationSimModel
+from aimet_torch.v1.quantsim import QuantizationSimModel
 from aimet_torch.qc_quantize_op import enable_recompute, QcQuantizeWrapper, LearnedGridQuantWrapper
 from aimet_common.defs import QuantScheme
 from aimet_torch.utils import get_all_quantizers, in_eval_mode, in_train_mode
