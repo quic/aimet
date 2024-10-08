@@ -528,7 +528,7 @@ def callAimetExtra(target_branch) {
         }
     if (target_branch != "develop") {
         echo "Running AIMET additional stages on ${CHANGE_TARGET} branch ..."
-        build job: "AIMET-Extra", parameters: [string(name: 'AIMET_GIT_COMMIT', value: "${CHANGE_BRANCH}"), string(name: 'PROJECT_BRANCH', value: target_branch), string(name: 'USE_LINARO', value: "${using_linaro}"), string(name: 'PREBUILT_DOCKER_IMAGE_URL', value: "${params.PREBUILT_DOCKER_IMAGE_URL}"]
+        build job: "AIMET-Extra", parameters: [string(name: 'AIMET_GIT_COMMIT', value: "${CHANGE_BRANCH}"), string(name: 'PROJECT_BRANCH', value: target_branch), string(name: 'USE_LINARO', value: "${using_linaro}"), string(name: 'PREBUILT_DOCKER_IMAGE_URL', value: "${params.PREBUILT_DOCKER_IMAGE_URL}")]
     }    else {
         echo "Running AIMET additional stages on develop branch ..."
         build job: "AIMET-Extra", parameters: [string(name: 'AIMET_GIT_COMMIT', value: "${CHANGE_BRANCH}"), string(name: 'USE_LINARO', value: "${using_linaro}"), string(name: 'PREBUILT_DOCKER_IMAGE_URL', value: "${params.PREBUILT_DOCKER_IMAGE_URL}")]
