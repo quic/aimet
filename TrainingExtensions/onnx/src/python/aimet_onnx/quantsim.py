@@ -678,29 +678,14 @@ class QuantizationSimModel:
                 qc_op.compute_encodings()
             qc_op.op_mode = OpMode.quantizeDequantize
 
-    @staticmethod
-    def _create_encoding_dict(encoding: libpymo.TfEncoding, qc_quantize_op: QcQuantizeOp) -> Union[Dict, None]:
-        """
-        Create encoding dictionary from encoding object
-        :param encoding: Encoding of the quantizer
-        :param qc_quantize_op: Quantizer
-        :return: Encoding Dictionary
-        """
-        data_type, bitwidth = qc_quantize_op.data_type, qc_quantize_op.bitwidth
-
-        if data_type == QuantizationDataType.float:
-            enc_dict = {'bitwidth': bitwidth, 'dtype': "float"}
-        else:
-            if encoding:
-                encoding_min, encoding_max, bw, scale, offset = encoding.min, encoding.max, encoding.bw, \
-                                                                encoding.delta, encoding.offset
-                is_symmetric = qc_quantize_op.use_symmetric_encodings
-
-                enc_dict = {'min': encoding_min, 'max': encoding_max, 'scale': scale, 'offset': int(offset),
-                            'bitwidth': bw, 'is_symmetric': str(is_symmetric), 'dtype': "int"}
-            else:
-                enc_dict = None
-        return enc_dict
+    def _get_encodings(self, quantizer_names) -> Dict:
+        encoding_dict = {}
+        for name in quantizer_names:
+            encoding = self.qc_quantize_op_dict[name].export_encodings(encoding_version)
+            if encoding is None:
+                continue
+            encoding_dict[name] = encoding
+        return encoding_dict
 
     def _export_encodings(self, encoding_file_path):
         """
@@ -708,22 +693,8 @@ class QuantizationSimModel:
 
         :param encoding_file_path: path to save the encoding files
         """
-
-        def update_encoding_dict_entry(encoding_dict: Dict, op_name: str):
-            qc_quantize_op = self.qc_quantize_op_dict[op_name]
-            encoding_dict[op_name] = []
-            for encoding in qc_quantize_op.encodings:
-                encoding_dict[op_name].append(QuantizationSimModel._create_encoding_dict(encoding, qc_quantize_op))
-
-        param_encodings = {}
-        for name in self.param_names:
-            if self.qc_quantize_op_dict[name].enabled:
-                update_encoding_dict_entry(param_encodings, name)
-
-        activation_encodings = {}
-        for name in self.activation_names:
-            if self.qc_quantize_op_dict[name].enabled:
-                update_encoding_dict_entry(activation_encodings, name)
+        param_encodings = self._get_encodings(self.param_names)
+        activation_encodings = self._get_encodings(self.activation_names)
 
         encodings_dict = {'version': encoding_version,
                           'activation_encodings': activation_encodings,

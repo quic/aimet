@@ -43,7 +43,7 @@ import os
 import pytest
 from aimet_common import libpymo
 from aimet_common.defs import QuantScheme, MAP_QUANT_SCHEME_TO_PYMO, MAP_ROUND_MODE_TO_PYMO, QuantizationDataType
-from aimet_onnx.qc_quantize_op import QcQuantizeOp, OpMode
+from aimet_onnx.qc_quantize_op import QcQuantizeOp, OpMode, TensorQuantizerParams
 from aimet_common import libquant_info
 from aimet_common.quantsim import calculate_delta_offset
 
@@ -808,3 +808,57 @@ class TestBlockwiseQuantizeOp:
 
         # Op should produce the quantDequant output
         assert np.allclose(output_tensor, expected_out.reshape(output_tensor.shape))
+
+    @pytest.mark.parametrize("symmetric, bitwidth, delta, offset", [(True, 8, 0.1, -128),
+                                                                    (False, 16, 0.0125, -1000)])
+    def test_export_per_tensor_int_encodings(self, symmetric, bitwidth, delta, offset):
+        quant_info = libquant_info.QcQuantizeInfo()
+        quant_info.usePerChannelMode = False
+        qc_quantize_op = QcQuantizeOp(quant_info, use_symmetric_encodings=symmetric, op_mode=OpMode.quantizeDequantize)
+        assert qc_quantize_op.export_encodings() is None
+        encoding = libpymo.TfEncoding()
+        encoding.min = delta * offset
+        encoding.max = delta * (offset + 2 ** bitwidth - 1)
+        encoding.bw = bitwidth
+        encoding.offset = offset
+        encoding.delta = delta
+        qc_quantize_op.encodings = [encoding]
+        exported_encodings = qc_quantize_op.export_encodings("0.6.1")
+        assert len(exported_encodings) == 1
+        assert exported_encodings[0]["scale"] == delta
+        assert exported_encodings[0]["offset"] == offset
+        assert exported_encodings[0]["bitwidth"] == bitwidth
+        assert exported_encodings[0]["dtype"] == "int"
+        assert exported_encodings[0]["is_symmetric"] == str(symmetric)
+
+    @pytest.mark.parametrize("symmetric, bitwidth, delta, offset", [(True, 8, 0.1, -128),])
+    def test_export_per_channel_int_encodings(self, symmetric, bitwidth, delta, offset):
+        channel_axis = 0
+        tensor_shape = [5, 8]
+        params = TensorQuantizerParams(tensor_shape, channel_axis)
+
+        quant_info = libquant_info.QcQuantizeInfo()
+        quant_info.usePerChannelMode = False
+        qc_quantize_op = QcQuantizeOp(quant_info, use_symmetric_encodings=symmetric, op_mode=OpMode.quantizeDequantize,
+                                      tensor_quantizer_params=params)
+        qc_quantize_op.enable_per_channel_quantization()
+        assert qc_quantize_op.export_encodings() is None
+        encodings = [libpymo.TfEncoding() for _ in range(tensor_shape[channel_axis])]
+        for encoding in encodings:
+            encoding.min = delta * offset
+            encoding.max = delta * (offset + 2 ** bitwidth - 1)
+            encoding.bw = bitwidth
+            encoding.offset = offset
+            encoding.delta = delta
+        qc_quantize_op.encodings = encodings
+        exported_encodings = qc_quantize_op.export_encodings("0.6.1")
+        assert len(exported_encodings) == tensor_shape[channel_axis]
+
+    def test_export_float_encodings(self):
+        quant_info = libquant_info.QcQuantizeInfo()
+        qc_quantize_op = QcQuantizeOp(quant_info, bitwidth=16, op_mode=OpMode.quantizeDequantize)
+        qc_quantize_op.data_type = QuantizationDataType.float
+        encodings = qc_quantize_op.export_encodings("0.6.1")
+        assert len(encodings) == 1
+        assert encodings[0]["dtype"] == "float"
+        assert encodings[0]["bitwidth"] == 16
