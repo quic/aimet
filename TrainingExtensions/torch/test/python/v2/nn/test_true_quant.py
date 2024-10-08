@@ -954,7 +954,27 @@ def _create_quantized_module(module):
     # (lambda: custom.Normalize(),                    lambda: ...),
     # (lambda: custom.Pad(),                          lambda: ...),
     # (lambda: custom.GridSample(),                   lambda: ...),
-    (lambda: custom.RmsNorm([5, 2, 3], [2], 1e-5),    lambda: (randn(5, 2, 3)))
+    (lambda: custom.RmsNorm([5, 2, 3], [2], 1e-5),    lambda: (randn(5, 2, 3))),
+    # (lambda custom.DynamicConv2d(),                 lambda: ...),
+    # (lambda custom.Pow(),                           lambda: ...),
+    # (lambda custom.CustomSiLU(),                    lambda: ...),
+    # (lambda custom.StridedSlice(),                  lambda: ...),
+    # (lambda custom.ChannelShuffle(),                lambda: ...),
+    # (lambda custom.Cast(),                          lambda: ...),
+    # (lambda custom.CustomGather(),                  lambda: ...),
+    # (lambda custom.DepthToSpaceCRDMode(),           lambda: ...),
+    # (lambda custom.DepthToSpaceDCRMode(),           lambda: ...),
+    # (lambda custom.CustomSparseConv3DLayer(),       lambda: ...),
+    # (lambda custom.SparseTensorWrapper(),           lambda: ...),
+    # (lambda custom.ScatterDense(),                  lambda: ...),
+    # (lambda custom.ScatterND(),                     lambda: ...),
+    # (lambda custom.RoiAlign(),                      lambda: ...),
+    # (lambda custom.NonMaxSuppression(),             lambda: ...),
+    # (lambda custom.GatherNd(),                      lambda: ...),
+    # (lambda custom.ScatterElements(),               lambda: ...),
+    # (lambda custom.OneHot(),                        lambda: ...),
+    # (lambda custom.Expand(),                        lambda: ...),
+    # (lambda custom.DynamicLinear(),                 lambda: ...),
 ]))
 def test_default_kernels(module_factory, input_factory):
     module = module_factory()

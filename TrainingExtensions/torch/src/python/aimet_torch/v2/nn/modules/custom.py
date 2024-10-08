@@ -566,3 +566,103 @@ class QuantizedRmsNorm(QuantizationMixin, RmsNorm):
 # class QuantizedGridSample(_DispatchMixin, QuantizationMixin, GridSample):
 #     """ Quantized GridSample """
 #     _builtin_torch_fn = torch.nn.functional.grid_sample
+#
+#
+# @QuantizationMixin.implements(DynamicConv2d)
+# class QuantizedDynamicConv2d(QuantizationMixin, DynamicConv2d):
+#     """ Quantized DynamicConv2d """
+#
+#
+# @QuantizationMixin.implements(Pow)
+# class QuantizedPow(QuantizationMixin, Pow):
+#     """ Quantized Pow """
+#
+#
+# @QuantizationMixin.implements(CustomSiLU)
+# class QuantizedCustomSiLU(QuantizationMixin, CustomSiLU):
+#     """ Quantized CustomSiLU """
+#
+#
+# @QuantizationMixin.implements(StridedSlice)
+# class QuantizedStridedSlice(QuantizationMixin, StridedSlice):
+#     """ Quantized StridedSlice """
+#
+#
+# @QuantizationMixin.implements(ChannelShuffle)
+# class QuantizedChannelShuffle(QuantizationMixin, ChannelShuffle):
+#     """ Quantized ChannelShuffle """
+#
+#
+# @QuantizationMixin.implements(Cast)
+# class QuantizedCast(QuantizationMixin, Cast):
+#     """ Quantized Cast """
+#
+#
+# @QuantizationMixin.implements(CustomGather)
+# class QuantizedCustomGather(QuantizationMixin, CustomGather):
+#     """ Quantized CustomGather """
+#
+#
+# @QuantizationMixin.implements(DepthToSpaceCRDMode)
+# class QuantizedDepthToSpaceCRDMode(QuantizationMixin, DepthToSpaceCRDMode):
+#     """ Quantized DepthToSpaceCRDMode """
+#
+#
+# @QuantizationMixin.implements(DepthToSpaceDCRMode)
+# class QuantizedDepthToSpaceDCRMode(QuantizationMixin, DepthToSpaceDCRMode):
+#     """ Quantized DepthToSpaceDCRMode """
+#
+#
+# @QuantizationMixin.implements(CustomSparseConv3DLayer)
+# class QuantizedCustomSparseConv3DLayer(QuantizationMixin, CustomSparseConv3DLayer):
+#     """ Quantized CustomSparseConv3DLayer """
+#
+#
+# @QuantizationMixin.implements(SparseTensorWrapper)
+# class QuantizedSparseTensorWrapper(QuantizationMixin, SparseTensorWrapper):
+#     """ Quantized SparseTensorWrapper """
+#
+#
+# @QuantizationMixin.implements(ScatterDense)
+# class QuantizedScatterDense(QuantizationMixin, ScatterDense):
+#     """ Quantized ScatterDense """
+#
+#
+# @QuantizationMixin.implements(ScatterND)
+# class QuantizedScatterND(QuantizationMixin, ScatterND):
+#     """ Quantized ScatterND """
+#
+#
+# @QuantizationMixin.implements(RoiAlign)
+# class QuantizedRoiAlign(QuantizationMixin, RoiAlign):
+#     """ Quantized RoiAlign """
+#
+#
+# @QuantizationMixin.implements(NonMaxSuppression)
+# class QuantizedNonMaxSuppression(QuantizationMixin, NonMaxSuppression):
+#     """ Quantized NonMaxSuppression """
+#
+#
+# @QuantizationMixin.implements(GatherNd)
+# class QuantizedGatherNd(QuantizationMixin, GatherNd):
+#     """ Quantized GatherNd """
+#
+#
+# @QuantizationMixin.implements(ScatterElements)
+# class QuantizedScatterElements(QuantizationMixin, ScatterElements):
+#     """ Quantized ScatterElements """
+#
+#
+# @QuantizationMixin.implements(OneHot)
+# class QuantizedOneHot(QuantizationMixin, OneHot):
+#     """ Quantized OneHot """
+#
+#
+# @QuantizationMixin.implements(Expand)
+# class QuantizedExpand(QuantizationMixin, Expand):
+#     """ Quantized Expand """
+#
+#
+# @QuantizationMixin.implements(DynamicLinear)
+# class QuantizedDynamicLinear(QuantizationMixin, DynamicLinear):
+#     """ Quantized DynamicLinear """
