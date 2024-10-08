@@ -17,8 +17,9 @@ For a discussion of quantization techniques, see :doc:`/user_guide/model_quantiz
 For a discussion of compression techniques, see :doc:`/user_guide/model_compression`.
 
 For the API reference, see:
+
 - :doc:`/api_docs/torch` for PyTorch
-- :doc:`/api_docs/keras` for TensorFlow Keras
+- :doc:`/api_docs/keras` for TensorFlow
 - :doc:`/api_docs/onnx` for ONNX
 
 Browse the notebooks
@@ -100,7 +101,7 @@ To run the notebooks, follow the instructions below.
    
 3. Copy and paste the URL into your browser.
 
-4. Install AIMET and its dependencies using the instructions in :doc:`install`.
+4. Install AIMET and its dependencies using the instructions in :doc:`AIMET installation </install/index>`.
 
 
 2. Download the example notebooks and related code
@@ -121,7 +122,6 @@ Set up your workspace using the following steps:
       mkdir $WORKSPACE && cd $WORKSPACE
 
 3. Identify the release tag (``<release_tag>``) of the AIMET package that you're working with at: https://github.com/quic/aimet/releases.
-<<<<<<< HEAD
 
 4. Clone the repository:
 
@@ -143,7 +143,7 @@ Set up your workspace using the following steps:
 3. Run the notebooks
 --------------------
 
-1. Navigate to one of the following paths under the Examples directory and launch your 
+1. Navigate to one of the following paths in the local repository directory and launch your 
    chosen Jupyter Notebook (`.ipynb` extension):
 
    - `Examples/torch/quantization/`
@@ -152,34 +152,5 @@ Set up your workspace using the following steps:
 
 2. Follow the instructions in the notebook to execute the code.
 
-=======
 
-4. Clone the repository:
-
-   .. code-block:: shell
-
-      git clone https://github.com/quic/aimet.git --branch <release_tag>
-
-5. Update the path environment variable:
-
-   .. code-block:: shell
-
-      export PYTHONPATH=$PYTHONPATH:${WORKSPACE}/aimet
-
-6. The dataloader, evaluator, and trainer used in the examples are for the ImageNet dataset. 
-   Download the ImageNet dataset from: 
-   https://www.image-net.org/download.php
-
-
-3. Run the notebooks
---------------------
-
-1. Navigate to one of the following paths under the Examples directory and launch your 
-   chosen Jupyter Notebook (`.ipynb` extension):
-
-   - `Examples/torch/quantization/`
-   - `Examples/torch/compression/`
-   - `Examples/tensorflow/quantization/keras/`
-
-2. Follow the instructions in the notebook to execute the code.
 
