@@ -170,6 +170,8 @@ fi
 # Set the root URL that hosts the pre-built development docker image
 if [ -n "$PREBUILT_DOCKER_IMAGE_URL" ]; then
     prebuilt_docker_image_url=${PREBUILT_DOCKER_IMAGE_URL}
+if [ ${CHANGE_TARGET}=="release-"* ]; then
+    prebuilt_docker_image_url=${AIMET_PREBUILT_DOCKER_IMAGE_URL}"-release"
 elif [ -n "$AIMET_PREBUILT_DOCKER_IMAGE_URL" ]; then
     # Use a custom source if one is provided
     prebuilt_docker_image_url=${AIMET_PREBUILT_DOCKER_IMAGE_URL}
