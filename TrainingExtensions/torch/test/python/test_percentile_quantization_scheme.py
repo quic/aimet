@@ -37,7 +37,7 @@
 import pytest
 import torch
 import torch.nn as nn
-from aimet_torch.quantsim import QuantizationSimModel
+from aimet_torch.v1.quantsim import QuantizationSimModel
 
 class TestPercentileSchemeStaticGrid:
     """ Test Percentile quantization scheme """ 

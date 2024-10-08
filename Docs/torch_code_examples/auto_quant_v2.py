@@ -44,8 +44,8 @@ import torch
 from torch.utils.data import Dataset, DataLoader, SubsetRandomSampler
 from torchvision import models, datasets, transforms
 
-from aimet_torch.adaround.adaround_weight import AdaroundParameters
-from aimet_torch.auto_quant_v2 import AutoQuant
+from aimet_torch.v1.adaround.adaround_weight import AdaroundParameters
+from aimet_torch.v1.auto_quant_v2 import AutoQuant
 
 # Step 1. Define constants and helper functions
 EVAL_DATASET_SIZE = 5000

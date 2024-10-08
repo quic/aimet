@@ -40,7 +40,7 @@
 import unittest
 import torch
 
-from aimet_torch.quantsim import QuantizationSimModel
+from aimet_torch.v1.quantsim import QuantizationSimModel
 from aimet_torch.transformers.utils import get_quantizable_pt_transformer_model
 
 

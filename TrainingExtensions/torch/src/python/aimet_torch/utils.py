@@ -60,7 +60,7 @@ from aimet_common.defs import QuantScheme, QuantizationDataType, MAP_QUANT_SCHEM
 from aimet_common.utils import AimetLogger, Handle, log_with_error_and_assert_if_false
 from aimet_common.utils import profile as _profile
 import aimet_common.libpymo as libpymo
-import aimet_torch.nn.modules.custom as aimet_modules
+import aimet_torch.v1.nn.modules.custom as aimet_modules
 from aimet_torch.tensor_quantizer import TensorQuantizer, StaticGridPerChannelQuantizer, StaticGridPerTensorQuantizer
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Utils)
@@ -1303,6 +1303,16 @@ def compute_partial_encoding(quantizer: TensorQuantizer, encoding_dict: Dict) ->
 
 def _red(msg: str):
     return f'\x1b[31;21m{msg}\x1b[0m'
+
+
+def _warn_replaced_in_v2(name: str, v2_new_api: str, v1_legacy_api: str = None):
+    msg = f"\"{name}\" will be replaced with \"{v2_new_api}\" soon in the later versions."
+
+    if v1_legacy_api:
+        msg += f" If you must keep using the v1 legacy API for backwards-compatibility,"\
+               f" please import \"{v1_legacy_api}\" instead."
+
+    warnings.warn(_red(msg), DeprecationWarning, stacklevel=3)
 
 
 def deprecated(msg: str):

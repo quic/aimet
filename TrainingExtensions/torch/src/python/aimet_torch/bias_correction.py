@@ -58,7 +58,7 @@ from aimet_common.defs import ActivationType
 from aimet_torch import utils
 from aimet_torch import quantsim as qsim
 from aimet_torch.meta.connectedgraph import ConnectedGraph
-from aimet_torch.quantsim import QcQuantizeWrapper
+from aimet_torch.v1.quantsim import QcQuantizeWrapper
 from aimet_torch.save_utils import SaveUtils
 from aimet_torch.utils import get_ordered_lists_of_conv_fc
 

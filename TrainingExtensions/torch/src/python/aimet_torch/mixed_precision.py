@@ -48,7 +48,7 @@ from aimet_common.amp.utils import (
     AMPSearchAlgo,
 )
 from aimet_common.defs import CallbackFunc
-from aimet_torch.quantsim import QuantizationSimModel
+from aimet_torch.v1.quantsim import QuantizationSimModel
 from aimet_torch.amp.mixed_precision_algo import GreedyMixedPrecisionAlgo
 from aimet_torch.amp.quantizer_groups import QuantizerGroup
 

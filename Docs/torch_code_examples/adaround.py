@@ -96,8 +96,8 @@ def apply_adaround_example():
 
     # Apply AdaRound
     from aimet_common.defs import QuantScheme
-    from aimet_torch.quantsim import QuantizationSimModel
-    from aimet_torch.adaround.adaround_weight import Adaround, AdaroundParameters
+    from aimet_torch.v1.quantsim import QuantizationSimModel
+    from aimet_torch.v1.adaround.adaround_weight import Adaround, AdaroundParameters
 
     # User action required
     # The following line of code is an example of how to use the ImageNet data's training data loader.

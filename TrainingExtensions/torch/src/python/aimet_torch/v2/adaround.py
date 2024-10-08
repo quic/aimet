@@ -44,12 +44,12 @@ import torch
 from torch import nn
 
 from aimet_common.defs import QuantScheme
-from aimet_torch.adaround.adaround_weight import Adaround as V1Adaround
-from aimet_torch.adaround.adaround_wrapper import AdaroundWrapper as V1AdaroundWrapper
+from aimet_torch.v1.adaround.adaround_weight import Adaround as V1Adaround
+from aimet_torch.v1.adaround.adaround_wrapper import AdaroundWrapper as V1AdaroundWrapper
 from aimet_torch.v2.quantsim import QuantizationSimModel
 from aimet_torch.v2.nn import BaseQuantizationMixin
 from aimet_torch.v2.quantization.affine import AffineQuantizerBase
-from aimet_torch.adaround.adaround_weight import AdaroundParameters as V1AdaroundParameters
+from aimet_torch.v1.adaround.adaround_weight import AdaroundParameters as V1AdaroundParameters
 
 
 class Adaround(V1Adaround):

@@ -50,7 +50,7 @@ from torchvision import models
 from torch.optim import lr_scheduler
 
 from aimet_common.defs import QuantScheme
-from aimet_torch.quantsim import QuantizationSimModel
+from aimet_torch.v1.quantsim import QuantizationSimModel
 
 from models.imagenet_dataloader import ImageNetDataLoader
 from aimet_torch.utils import IterFirstX

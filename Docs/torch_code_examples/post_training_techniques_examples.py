@@ -160,7 +160,7 @@ def bias_correction_empirical():
 
     # Apply Empirical Bias Correction
     from aimet_torch import bias_correction
-    from aimet_torch.quantsim import QuantParams
+    from aimet_torch.v1.quantsim import QuantParams
 
     params = QuantParams(weight_bw=4, act_bw=4, round_mode="nearest", quant_scheme='tf_enhanced')
 
@@ -190,7 +190,7 @@ def bias_correction_analytical_and_empirical():
 
     # Apply Analytical and Empirical Bias Correction
     from aimet_torch import bias_correction
-    from aimet_torch.quantsim import QuantParams
+    from aimet_torch.v1.quantsim import QuantParams
 
     params = QuantParams(weight_bw=4, act_bw=4, round_mode="nearest", quant_scheme='tf_enhanced')
 

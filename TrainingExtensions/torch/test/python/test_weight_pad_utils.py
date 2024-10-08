@@ -47,7 +47,7 @@ from onnx import numpy_helper
 from aimet_common.defs import QuantScheme, QuantizationDataType, MAP_ROUND_MODE_TO_PYMO
 from aimet_torch.examples.test_models import MultiInput
 
-from aimet_torch.quantsim import QuantizationSimModel
+from aimet_torch.v1.quantsim import QuantizationSimModel
 from aimet_torch.tensor_quantizer import StaticGridPerTensorQuantizer, StaticGridPerChannelQuantizer
 from aimet_torch.weight_padding_utils import recompute_scale, recompute_encodings, weight_pad, WeightPaddingParams
 
