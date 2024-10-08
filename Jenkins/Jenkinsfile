@@ -44,659 +44,206 @@ pipeline {
                 stash name: 'AIMETBuildTree', useDefaultExcludes: false
             }
         }
-        stage('Pipelines start') {
-            parallel {
-                // Start the pipeline for Tensorflow GPU variant
-                stage("TF GPU") {
-                    agent { label "${params.BUILD_LABEL_GPU}" }
-                    stages {
-                        stage('Setup') {
-                            steps {
-                                cleanWs()
-                                unstash 'AIMETBuildTree'
-                                script{
-                                    env.AIMET_VARIANT_TF_GPU = "tf-gpu"
-                                }
-                                echo "*** Running SETUP stage for ${env.AIMET_VARIANT_TF_GPU} variant on ${env.NODE_NAME} in workspace ${env.WORKSPACE_ROOT} ***"
-                            }
-                        }
 
-                        // Run commit checks ONLY in one of the parallel stages
-                        stage('Check commits') {
-                            steps {
-                                echo 'Running commit checks...'
-                                script{
-                                    env.REPO_OR_FORK_URL = "${REPO_URL}"
-                                    using_linaro=env.USE_LINARO
-                                    if (env.CHANGE_FORK != null) {
-                                        env.REPO_OR_FORK_URL = "https://github.com/${env.CHANGE_FORK}/aimet"
-                                    }
-                                    sh "bash -l -c \"git clone ${env.REPO_OR_FORK_URL} -b ${env.CHANGE_BRANCH} commit_checks_repo\""
-                                    if (didDockerFileChange("tf-gpu")) {
-                                            // setting USE LINARO value to EMPTY to rebuild docker image
-                                            using_linaro=""
-                                    }
-                                    if ("${env.QCInternalValidation}" == "true") {
-                                        withCredentials([usernameColonPassword(credentialsId: 'neoci-pat', variable: 'USERPASS')]) {
-                                            sh "AIMET_VARIANT=\"tf-gpu\" bash -l -c \"cd ${REPO_NAME} && ${env.DEPENDENCY_DATA_PATH}/commit_check/commit-checks.sh -e AIMET_VARIANT ${using_linaro} ${env.PREBUILT_DOCKER_IMAGE_URL}\""
-                                        }
-                                    } else {
-                                        sh "AIMET_VARIANT=\"tf-gpu\" bash -l -c \"cd ${REPO_NAME} && ${env.DEPENDENCY_DATA_PATH}/commit_check/commit-checks.sh -e AIMET_VARIANT ${using_linaro} ${env.PREBUILT_DOCKER_IMAGE_URL}\""
-                                    }
-                                }
-                                sh "bash -l -c \"rm -rf commit_checks_repo\""
-                            }
+        stage("Check Commits") {
+            agent { label "${params.BUILD_LABEL_CPU}" }                            
+                 
+            steps {
+                //Set up a TF-CPU docker container to run commit checks script on
+                cleanWs()
+                unstash 'AIMETBuildTree'
+                script{
+                    env.AIMET_VARIANT_TF_GPU = "tf-cpu"
+                }
+                echo "*** Running SETUP stage for ${env.AIMET_VARIANT_TF_CPU} variant on ${env.NODE_NAME} in workspace ${env.WORKSPACE_ROOT} ***"
+                echo 'Running commit checks...'
+                script{
+                    env.REPO_OR_FORK_URL = "${REPO_URL}"
+                    using_linaro=env.USE_LINARO
+                    if (env.CHANGE_FORK != null) {
+                        env.REPO_OR_FORK_URL = "https://github.com/${env.CHANGE_FORK}/aimet"
+                    }
+                    sh "bash -l -c \"git clone ${env.REPO_OR_FORK_URL} -b ${env.CHANGE_BRANCH} commit_checks_repo\""
+                    if (didDockerFileChange("tf-cpu")) {
+                            // setting USE LINARO value to EMPTY to rebuild docker image
+                            using_linaro=""
+                    }
+                    if ("${env.QCInternalValidation}" == "true") {
+                        withCredentials([usernameColonPassword(credentialsId: 'neoci-pat', variable: 'USERPASS')]) {
+                            sh "AIMET_VARIANT=\"tf-cpu\" bash -l -c \"cd ${REPO_NAME} && ${env.DEPENDENCY_DATA_PATH}/commit_check/commit-checks.sh -e AIMET_VARIANT ${using_linaro} ${env.PREBUILT_DOCKER_IMAGE_URL}\""
                         }
-
-                        stage('Build') {
-                            steps {
-                                echo 'Building code (and generating Docs and pip packages)...'
-                                script {
-                                    runStage(env.AIMET_VARIANT_TF_GPU, "-bp")
-                                }
-                            }
-                        }
-
-                        stage('Code violations') {
-                            steps {
-                                echo 'Running code violations...'
-                                script {
-                                    runStage(env.AIMET_VARIANT_TF_GPU, "-v")
-                                }
-                            }
-                            // post {
-                            //     always {
-                            //         step([
-                            //                 $class                      : 'WarningsPublisher',
-                            //                 parserConfigurations        : [[
-                            //                                                 parserName: 'PYLint',
-                            //                                                 pattern   : "**/**/**/*pylint_results.out"
-                            //                                               ]],
-                            //                 failedTotalHigh             : THRESHOLD_OBJ.pylint_fail_thresholds.high_priority,
-                            //                 failedTotalNormal           : THRESHOLD_OBJ.pylint_fail_thresholds.normal_priority,
-                            //                 failedTotalLow              : THRESHOLD_OBJ.pylint_fail_thresholds.low_priority,
-                            //                 usePreviousBuildAsReference : true
-                            //         ])
-                            //         script {
-                            //             if (currentBuild.currentResult.equals("FAILURE")) {
-                            //                 // the plugin won't fail the stage.  it only sets the build status, so we have to fail it
-                            //                 // manually
-                            //                 sh "exit 1"
-                            //             }
-                            //         }
-                            //     }
-                            // }
-                        }
-
-                        stage('Unit tests') {
-                            steps {
-                                script {
-                                    if ("${env.QCInternalValidation}" == "false") {
-                                        echo 'Building code and running tests...'
-                                        runStage(env.AIMET_VARIANT_TF_GPU, "-u")
-                                    }
-                                }
-                            }
-                            post {
-                                always {
-                                    script {
-                                        if ("${env.QCInternalValidation}" == "false") {
-                                            // Parse CTest, Junit, or GoogleTest results
-                                            xunit thresholdMode: 2,
-                                            thresholds: [
-                                                failed(failureNewThreshold: THRESHOLD_OBJ.unittests_thresholds.failed_thresholds.new_tests,
-                                                    failureThreshold: THRESHOLD_OBJ.unittests_thresholds.failed_thresholds.total_tests,
-                                                    unstableNewThreshold: THRESHOLD_OBJ.unittests_thresholds.skipped_thresholds.new_tests,
-                                                    unstableThreshold: THRESHOLD_OBJ.unittests_thresholds.skipped_thresholds.total_tests)],
-                                            tools: [Custom(customXSL: "${XUNIT_XSL_FILE}",
-                                                        deleteOutputFiles: false,
-                                                        excludesPattern: '',
-                                                        pattern: "**/unit_test_results/**/*.xml",
-                                                        skipNoTestFiles: true,
-                                                        stopProcessingIfError: true)]
-                                        }
-                                    }
-                                }
-                            }
-                        }
-
-                        stage('Static analysis') {
-                            steps {
-                                echo 'Running static analysis...'
-                                script {
-                                    echo 'WARNING: Currently NOT failing on static analysis errors!'
-                                    //TODO Remove the '| true' from the below invocation when errors are fixed
-                                    runStage(env.AIMET_VARIANT_TF_GPU, "-s | true")
-                                }
-                            }
-                        }
+                    } else {
+                        sh "AIMET_VARIANT=\"tf-cpu\" bash -l -c \"cd ${REPO_NAME} && ${env.DEPENDENCY_DATA_PATH}/commit_check/commit-checks.sh -e AIMET_VARIANT ${using_linaro} ${env.PREBUILT_DOCKER_IMAGE_URL}\""
                     }
                 }
-
-
-                // Start the pipeline for Torch GPU variant
-                stage("TorchGPU") {
-                    agent { label "${params.BUILD_LABEL_GPU}" }
-                    stages {
-                        stage('Setup') {
-                            steps {
-                                cleanWs()
-                                unstash 'AIMETBuildTree'
-                                script{
-                                    env.AIMET_VARIANT_TORCH_GPU = "torch-gpu"
-                                }
-                                echo "*** Running SETUP stage for ${env.AIMET_VARIANT_TORCH_GPU} variant on ${env.NODE_NAME} in workspace ${env.WORKSPACE_ROOT} ***"
-                            }
-                        }
-
-                        stage('Build') {
-                            steps {
-                                echo 'Building code (and generating Docs and pip packages)...'
-                                script {
-                                    //TODO Change option back to "-bp" as soon as issue is fixed
-                                    runStage(env.AIMET_VARIANT_TORCH_GPU, "-bp")
-                                }
-                            }
-                        }
-
-                        stage('Code violations') {
-                            steps {
-                                echo 'Running code violations...'
-                                script {
-                                    runStage(env.AIMET_VARIANT_TORCH_GPU, "-v")
-                                }
-                            }
-                            // post {
-                            //     always {
-                            //         step([
-                            //                 $class                      : 'WarningsPublisher',
-                            //                 parserConfigurations        : [[
-                            //                                                 parserName: 'PYLint',
-                            //                                                 pattern   : "**/**/**/*pylint_results.out"
-                            //                                               ]],
-                            //                 failedTotalHigh             : THRESHOLD_OBJ.pylint_fail_thresholds.high_priority,
-                            //                 failedTotalNormal           : THRESHOLD_OBJ.pylint_fail_thresholds.normal_priority,
-                            //                 failedTotalLow              : THRESHOLD_OBJ.pylint_fail_thresholds.low_priority,
-                            //                 usePreviousBuildAsReference : true
-                            //         ])
-                            //         script {
-                            //             if (currentBuild.currentResult.equals("FAILURE")) {
-                            //                 // the plugin won't fail the stage.  it only sets the build status, so we have to fail it
-                            //                 // manually
-                            //                 sh "exit 1"
-                            //             }
-                            //         }
-                            //     }
-                            // }
-                        }
-
-                        stage('Unit tests') {
-                            steps {
-                                script {
-                                    if ("${env.QCInternalValidation}" == "false") {
-                                        echo 'Building code and running tests...'
-                                        runStage(env.AIMET_VARIANT_TORCH_GPU, "-u")
-                                    }
-                                }
-                            }
-                            post {
-                                always {
-                                    script {
-                                        if ("${env.QCInternalValidation}" == "false") {
-                                            // Parse CTest, Junit, or GoogleTest results
-                                            xunit thresholdMode: 2,
-                                            thresholds: [
-                                                failed(failureNewThreshold: THRESHOLD_OBJ.unittests_thresholds.failed_thresholds.new_tests,
-                                                    failureThreshold: THRESHOLD_OBJ.unittests_thresholds.failed_thresholds.total_tests,
-                                                    unstableNewThreshold: THRESHOLD_OBJ.unittests_thresholds.skipped_thresholds.new_tests,
-                                                    unstableThreshold: THRESHOLD_OBJ.unittests_thresholds.skipped_thresholds.total_tests)],
-                                            tools: [Custom(customXSL: "${XUNIT_XSL_FILE}",
-                                                        deleteOutputFiles: false,
-                                                        excludesPattern: '',
-                                                        pattern: "**/unit_test_results/**/*.xml",
-                                                        skipNoTestFiles: true,
-                                                        stopProcessingIfError: true)]
-                                        }
-                                    }
-                                }
-                            }
-                        }
-
-                        stage('Static analysis') {
-                            steps {
-                                echo 'Running static analysis...'
-                                script {
-                                    echo 'WARNING: Currently NOT failing on static analysis errors!'
-                                    //TODO Remove the '| true' from the below invocation when errors are fixed
-                                    runStage(env.AIMET_VARIANT_TORCH_GPU, "-s | true")
-                                }
-                            }
-                        }
-                    }
-                }
-
-                // Start the pipeline for Onnx GPU variant
-                stage("OnnxGPU") {
-                    agent { label "${params.BUILD_LABEL_GPU}" }
-                    stages {
-                        stage('Setup') {
-                            steps {
-                                cleanWs()
-                                unstash 'AIMETBuildTree'
-                                script{
-                                    env.AIMET_VARIANT_ONNX_GPU = "onnx-gpu"
-                                }
-                                echo "*** Running SETUP stage for ${env.AIMET_VARIANT_ONNX_GPU} variant on ${env.NODE_NAME} in workspace ${env.WORKSPACE_ROOT} ***"
-                            }
-                        }
-
-                        stage('Build') {
-                            steps {
-                                echo 'Building code (and generating Docs and pip packages)...'
-                                script {
-                                    //TODO Change option back to "-bp" as soon as issue is fixed
-                                    runStage(env.AIMET_VARIANT_ONNX_GPU, "-bp")
-                                }
-                            }
-                        }
-
-                        stage('Code violations') {
-                            steps {
-                                echo 'Running code violations...'
-                                script {
-                                    runStage(env.AIMET_VARIANT_ONNX_GPU, "-v")
-                                }
-                            }
-                            // post {
-                            //     always {
-                            //         step([
-                            //                 $class                      : 'WarningsPublisher',
-                            //                 parserConfigurations        : [[
-                            //                                                 parserName: 'PYLint',
-                            //                                                 pattern   : "**/**/**/*pylint_results.out"
-                            //                                               ]],
-                            //                 failedTotalHigh             : THRESHOLD_OBJ.pylint_fail_thresholds.high_priority,
-                            //                 failedTotalNormal           : THRESHOLD_OBJ.pylint_fail_thresholds.normal_priority,
-                            //                 failedTotalLow              : THRESHOLD_OBJ.pylint_fail_thresholds.low_priority,
-                            //                 usePreviousBuildAsReference : true
-                            //         ])
-                            //         script {
-                            //             if (currentBuild.currentResult.equals("FAILURE")) {
-                            //                 // the plugin won't fail the stage.  it only sets the build status, so we have to fail it
-                            //                 // manually
-                            //                 sh "exit 1"
-                            //             }
-                            //         }
-                            //     }
-                            // }
-                        }
-
-                        stage('Unit tests') {
-                            steps {
-                                script {
-                                    if ("${env.QCInternalValidation}" == "false") {
-                                        echo 'Building code and running tests...'
-                                        runStage(env.AIMET_VARIANT_ONNX_GPU, "-u")
-                                    }
-                                }
-                            }
-                            post {
-                                always {
-                                    script {
-                                        if ("${env.QCInternalValidation}" == "false") {
-                                            // Parse CTest, Junit, or GoogleTest results
-                                            xunit thresholdMode: 2,
-                                            thresholds: [
-                                                failed(failureNewThreshold: THRESHOLD_OBJ.unittests_thresholds.failed_thresholds.new_tests,
-                                                    failureThreshold: THRESHOLD_OBJ.unittests_thresholds.failed_thresholds.total_tests,
-                                                    unstableNewThreshold: THRESHOLD_OBJ.unittests_thresholds.skipped_thresholds.new_tests,
-                                                    unstableThreshold: THRESHOLD_OBJ.unittests_thresholds.skipped_thresholds.total_tests)],
-                                            tools: [Custom(customXSL: "${XUNIT_XSL_FILE}",
-                                                        deleteOutputFiles: false,
-                                                        excludesPattern: '',
-                                                        pattern: "**/unit_test_results/**/*.xml",
-                                                        skipNoTestFiles: true,
-                                                        stopProcessingIfError: true)]
-                                        }
-                                    }
-                                }
-                            }
-                        }
-
-                        stage('Static analysis') {
-                            steps {
-                                echo 'Running static analysis...'
-                                script {
-                                    echo 'WARNING: Currently NOT failing on static analysis errors!'
-                                    //TODO Remove the '| true' from the below invocation when errors are fixed
-                                    runStage(env.AIMET_VARIANT_ONNX_GPU, "-s | true")
-                                }
-                            }
-                        }
-                    }
-                }
-
-                // Start the pipeline for ONNX CPU variant
-                stage("ONNXCPU") {
-                    agent { label "${params.BUILD_LABEL_CPU}" }
-                    stages {
-                        stage('Setup') {
-                            steps {
-                                cleanWs()
-                                unstash 'AIMETBuildTree'
-                                script {
-                                    env.AIMET_VARIANT_ONNX_CPU = "onnx-cpu"
-                                }
-                                echo "*** Running SETUP stage for ${env.AIMET_VARIANT_ONNX_CPU} variant on ${env.NODE_NAME} in workspace ${env.WORKSPACE_ROOT} ***"
-                            }
-                        }
-
-                        stage('Build') {
-                            steps {
-                                echo 'Building code (and generating Docs and pip packages)...'
-                                script {
-                                    //TODO Change option back to "-bp" as soon as issue is fixed
-                                    runStage(env.AIMET_VARIANT_ONNX_CPU, "-bp")
-                                }
-                            }
-                        }
-
-                        stage('Code violations') {
-                            steps {
-                                echo 'Running code violations...'
-                                script {
-                                    runStage(env.AIMET_VARIANT_ONNX_CPU, "-v")
-                                }
-                            }
-                            // post {
-                            //     always {
-                            //         step([
-                            //                 $class                      : 'WarningsPublisher',
-                            //                 parserConfigurations        : [[
-                            //                                                 parserName: 'PYLint',
-                            //                                                 pattern   : "**/**/**/*pylint_results.out"
-                            //                                               ]],
-                            //                 failedTotalHigh             : THRESHOLD_OBJ.pylint_fail_thresholds.high_priority,
-                            //                 failedTotalNormal           : THRESHOLD_OBJ.pylint_fail_thresholds.normal_priority,
-                            //                 failedTotalLow              : THRESHOLD_OBJ.pylint_fail_thresholds.low_priority,
-                            //                 usePreviousBuildAsReference : true
-                            //         ])
-                            //         script {
-                            //             if (currentBuild.currentResult.equals("FAILURE")) {
-                            //                 // the plugin won't fail the stage.  it only sets the build status, so we have to fail it
-                            //                 // manually
-                            //                 sh "exit 1"
-                            //             }
-                            //         }
-                            //     }
-                            // }
-                        }
-
-                        stage('Unit tests') {
-                            steps {
-                                script {
-                                    if ("${env.QCInternalValidation}" == "false") {
-                                        echo 'Building code and running tests...'
-                                        runStage(env.AIMET_VARIANT_ONNX_CPU, "-u")
-                                    }
-                                }
-                            }
-                            post {
-                                always {
-                                    script {
-                                        if ("${env.QCInternalValidation}" == "false") {
-                                            // Parse CTest, Junit, or GoogleTest results
-                                            xunit thresholdMode: 2,
-                                            thresholds: [
-                                                failed(failureNewThreshold: THRESHOLD_OBJ.unittests_thresholds.failed_thresholds.new_tests,
-                                                    failureThreshold: THRESHOLD_OBJ.unittests_thresholds.failed_thresholds.total_tests,
-                                                    unstableNewThreshold: THRESHOLD_OBJ.unittests_thresholds.skipped_thresholds.new_tests,
-                                                    unstableThreshold: THRESHOLD_OBJ.unittests_thresholds.skipped_thresholds.total_tests)],
-                                            tools: [Custom(customXSL: "${XUNIT_XSL_FILE}",
-                                                        deleteOutputFiles: false,
-                                                        excludesPattern: '',
-                                                        pattern: "**/unit_test_results/**/*.xml",
-                                                        skipNoTestFiles: true,
-                                                        stopProcessingIfError: true)]
-                                        }
-                                    }
-                                }
-                            }
-                        }
-
-                        stage('Static analysis') {
-                            steps {
-                                echo 'Running static analysis...'
-                                script {
-                                    echo 'WARNING: Currently NOT failing on static analysis errors!'
-                                    //TODO Remove the '| true' from the below invocation when errors are fixed
-                                    runStage(env.AIMET_VARIANT_ONNX_CPU, "-s | true")
-                                }
-                            }
-                        }
-                    } // stages
-                } // stage("ONNXCPU")
-
-                // Start the pipeline for Tensorflow CPU variant
-                stage("TF CPU") {
-                    agent { label "${params.BUILD_LABEL_CPU}" }
-                    stages {
-                        stage('Setup') {
-                            steps {
-                                cleanWs()
-                                unstash 'AIMETBuildTree'
-                                script {
-                                    env.AIMET_VARIANT_TF_CPU = "tf-cpu"
-                                }
-                                echo "*** Running SETUP stage for ${env.AIMET_VARIANT_TF_CPU} variant on ${env.NODE_NAME} in workspace ${env.WORKSPACE_ROOT} ***"
-                            }
-                        }
-
-                        stage('Build') {
-                            steps {
-                                echo 'Building code (and generating Docs and pip packages)...'
-                                script {
-                                    //TODO Change option back to "-bp" as soon as issue is fixed
-                                    runStage(env.AIMET_VARIANT_TF_CPU, "-bp")
-                                }
-                            }
-                        }
-
-                        stage('Code violations') {
-                            steps {
-                                echo 'Running code violations...'
-                                script {
-                                    runStage(env.AIMET_VARIANT_TF_CPU, "-v")
-                                }
-                            }
-                            // post {
-                            //     always {
-                            //         step([
-                            //                 $class                      : 'WarningsPublisher',
-                            //                 parserConfigurations        : [[
-                            //                                                 parserName: 'PYLint',
-                            //                                                 pattern   : "**/**/**/*pylint_results.out"
-                            //                                               ]],
-                            //                 failedTotalHigh             : THRESHOLD_OBJ.pylint_fail_thresholds.high_priority,
-                            //                 failedTotalNormal           : THRESHOLD_OBJ.pylint_fail_thresholds.normal_priority,
-                            //                 failedTotalLow              : THRESHOLD_OBJ.pylint_fail_thresholds.low_priority,
-                            //                 usePreviousBuildAsReference : true
-                            //         ])
-                            //         script {
-                            //             if (currentBuild.currentResult.equals("FAILURE")) {
-                            //                 // the plugin won't fail the stage.  it only sets the build status, so we have to fail it
-                            //                 // manually
-                            //                 sh "exit 1"
-                            //             }
-                            //         }
-                            //     }
-                            // }
-                        }
-
-                        stage('Unit tests') {
-                            steps {
-                                script {
-                                    if ("${env.QCInternalValidation}" == "false") {
-                                        echo 'Building code and running tests...'
-                                        runStage(env.AIMET_VARIANT_TF_CPU, "-u")
-                                    }
-                                }
-                            }
-                            post {
-                                always {
-                                    script {
-                                        if ("${env.QCInternalValidation}" == "false") {
-                                            // Parse CTest, Junit, or GoogleTest results
-                                            xunit thresholdMode: 2,
-                                            thresholds: [
-                                                failed(failureNewThreshold: THRESHOLD_OBJ.unittests_thresholds.failed_thresholds.new_tests,
-                                                    failureThreshold: THRESHOLD_OBJ.unittests_thresholds.failed_thresholds.total_tests,
-                                                    unstableNewThreshold: THRESHOLD_OBJ.unittests_thresholds.skipped_thresholds.new_tests,
-                                                    unstableThreshold: THRESHOLD_OBJ.unittests_thresholds.skipped_thresholds.total_tests)],
-                                            tools: [Custom(customXSL: "${XUNIT_XSL_FILE}",
-                                                        deleteOutputFiles: false,
-                                                        excludesPattern: '',
-                                                        pattern: "**/unit_test_results/**/*.xml",
-                                                        skipNoTestFiles: true,
-                                                        stopProcessingIfError: true)]
-                                        }
-                                    }
-                                }
-                            }
-                        }
-
-                        stage('Static analysis') {
-                            steps {
-                                echo 'Running static analysis...'
-                                script {
-                                    echo 'WARNING: Currently NOT failing on static analysis errors!'
-                                    //TODO Remove the '| true' from the below invocation when errors are fixed
-                                    runStage(env.AIMET_VARIANT_TF_CPU, "-s | true")
-                                }
-                            }
-                        }
-                    } // stages
-                } // stage("TF CPU")
-
-
-                // Start the pipeline for Torch CPU variant
-                stage("TorchCPU") {
-                    agent { label "${params.BUILD_LABEL_CPU}" }
-                    stages {
-                        stage('Setup') {
-                            steps {
-                                cleanWs()
-                                unstash 'AIMETBuildTree'
-                                script {
-                                    env.AIMET_VARIANT_TORCH_CPU = "torch-cpu"
-                                }
-                                echo "*** Running SETUP stage for ${env.AIMET_VARIANT_TORCH_CPU} variant on ${env.NODE_NAME} in workspace ${env.WORKSPACE_ROOT} ***"
-                            }
-                        }
-
-                        stage('Build') {
-                            steps {
-                                echo 'Building code (and generating Docs and pip packages)...'
-                                script {
-                                    runStage(env.AIMET_VARIANT_TORCH_CPU, "-bp")
-                                }
-                            }
-                        }
-
-                        stage('Code violations') {
-                            steps {
-                                echo 'Running code violations...'
-                                script {
-                                    runStage(env.AIMET_VARIANT_TORCH_CPU, "-v")
-                                }
-                            }
-                            // post {
-                            //     always {
-                            //         step([
-                            //                 $class                      : 'WarningsPublisher',
-                            //                 parserConfigurations        : [[
-                            //                                                 parserName: 'PYLint',
-                            //                                                 pattern   : "**/**/**/*pylint_results.out"
-                            //                                               ]],
-                            //                 failedTotalHigh             : THRESHOLD_OBJ.pylint_fail_thresholds.high_priority,
-                            //                 failedTotalNormal           : THRESHOLD_OBJ.pylint_fail_thresholds.normal_priority,
-                            //                 failedTotalLow              : THRESHOLD_OBJ.pylint_fail_thresholds.low_priority,
-                            //                 usePreviousBuildAsReference : true
-                            //         ])
-                            //         script {
-                            //             if (currentBuild.currentResult.equals("FAILURE")) {
-                            //                 // the plugin won't fail the stage.  it only sets the build status, so we have to fail it
-                            //                 // manually
-                            //                 sh "exit 1"
-                            //             }
-                            //         }
-                            //     }
-                            // }
-                        }
-
-                        stage('Unit tests') {
-                            steps {
-                                script {
-                                    if ("${env.QCInternalValidation}" == "false") {
-                                        echo 'Building code and running tests...'
-                                        runStage(env.AIMET_VARIANT_TORCH_CPU, "-u")
-                                    }
-                                }
-                            }
-                            post {
-                                always {
-                                    script {
-                                        if ("${env.QCInternalValidation}" == "false") {
-                                            // Parse CTest, Junit, or GoogleTest results
-                                            xunit thresholdMode: 2,
-                                            thresholds: [
-                                                failed(failureNewThreshold: THRESHOLD_OBJ.unittests_thresholds.failed_thresholds.new_tests,
-                                                    failureThreshold: THRESHOLD_OBJ.unittests_thresholds.failed_thresholds.total_tests,
-                                                    unstableNewThreshold: THRESHOLD_OBJ.unittests_thresholds.skipped_thresholds.new_tests,
-                                                    unstableThreshold: THRESHOLD_OBJ.unittests_thresholds.skipped_thresholds.total_tests)],
-                                            tools: [Custom(customXSL: "${XUNIT_XSL_FILE}",
-                                                        deleteOutputFiles: false,
-                                                        excludesPattern: '',
-                                                        pattern: "**/unit_test_results/**/*.xml",
-                                                        skipNoTestFiles: true,
-                                                        stopProcessingIfError: true)]
-                                        }
-                                    }
-                                }
-                            }
-                        }
-
-                        stage('Static analysis') {
-                            steps {
-                                echo 'Running static analysis...'
-                                script {
-                                    echo 'WARNING: Currently NOT failing on static analysis errors!'
-                                    //TODO Remove the '| true' from the below invocation when errors are fixed
-                                    runStage(env.AIMET_VARIANT_TORCH_CPU, "-s | true")
-                                }
-                            }
-                        }
-                    } // stages
-                } // stage("TorchCPU")
-
-
-                //Start an optional pipeline to perform additional testing
-                stage("extra") {
-                    stages {
-                        stage('AIMET extra ALL STAGES') {
-                            steps {
-                                script {
-                                    if ("${env.QCInternalValidation}" == "true") {
-                                        echo 'Running AIMET additional stages'
-                                        callAimetExtra(env.CHANGE_TARGET)
-                                    }
-                                }
-                            }
-                        }
-                    }
-                } // stage("extra")
-            }
+                sh "bash -l -c \"rm -rf commit_checks_repo\""
+            }                  
         }
+
+
+        stage('Pipelines start') {
+        
+            matrix {
+                axes {
+                    axis {
+                        name 'ML_FMWORK'
+                        values 'torch', 'tf', 'onnx'
+                    }
+                    axis {
+                        name 'PROC_TYPE'
+                        values 'cpu', 'gpu'
+                    }
+                }
+                excludes {
+                    exclude {
+                        axis {
+                            name 'ML_FMWORK'
+                            values 'extra'
+                        }
+                        axis {
+                            name 'PROC_TYPE'
+                            values 'gpu'
+                        }
+                    }
+                }
+
+                agent { label "docker-build-aimet-pr-${PROC_TYPE}" } 
+
+
+
+                stages {
+                    
+                    stage('Start') {
+                      
+                        steps {
+                            script {
+                                stage("${ML_FMWORK}-${PROC_TYPE}".toUpperCase()) {
+                                    print "${ML_FMWORK}-${PROC_TYPE}"
+                                }
+                            }
+                        }
+
+                    }
+                         
+                    stage('Setup') {
+
+                        steps {
+                            cleanWs()
+                            unstash 'AIMETBuildTree'
+                            echo "*** Running SETUP stage for ${ML_FMWORK}-${PROC_TYPE} variant on ${env.NODE_NAME} in workspace ${env.WORKSPACE_ROOT} ***"
+                        }
+                    }
+
+
+                    stage('Build') {
+  
+                        steps {
+                            echo 'Building code (and generating Docs and pip packages)...'
+                            script {
+                                runStage("${ML_FMWORK}-${PROC_TYPE}", "-bp")
+                            }
+                        }
+                    }
+
+                    stage('Code violations') {
+
+                        steps {
+                            echo 'Running code violations...'
+                            script {
+                                runStage("${ML_FMWORK}-${PROC_TYPE}", "-v")
+                            }
+                        }
+                        // post {
+                        //     always {
+                        //         step([
+                        //                 $class                      : 'WarningsPublisher',
+                        //                 parserConfigurations        : [[
+                        //                                                 parserName: 'PYLint',
+                        //                                                 pattern   : "**/**/**/*pylint_results.out"
+                        //                                               ]],
+                        //                 failedTotalHigh             : THRESHOLD_OBJ.pylint_fail_thresholds.high_priority,
+                        //                 failedTotalNormal           : THRESHOLD_OBJ.pylint_fail_thresholds.normal_priority,
+                        //                 failedTotalLow              : THRESHOLD_OBJ.pylint_fail_thresholds.low_priority,
+                        //                 usePreviousBuildAsReference : true
+                        //         ])
+                        //         script {
+                        //             if (currentBuild.currentResult.equals("FAILURE")) {
+                        //                 // the plugin won't fail the stage.  it only sets the build status, so we have to fail it
+                        //                 // manually
+                        //                 sh "exit 1"
+                        //             }
+                        //         }
+                        //     }
+                        // }
+                    }
+
+                    stage('Unit tests') {
+
+                        steps {
+                            script {
+                                if ("${env.QCInternalValidation}" == "false") {
+                                    echo 'Building code and running tests...'
+                                    runStage("${ML_FMWORK}-${PROC_TYPE}", "-u")
+                                }
+                            }
+                        }
+                        post {
+                            always {
+                                script {
+                                    if ("${env.QCInternalValidation}" == "false") {
+                                        // Parse CTest, Junit, or GoogleTest results
+                                        xunit thresholdMode: 2,
+                                        thresholds: [
+                                            failed(failureNewThreshold: THRESHOLD_OBJ.unittests_thresholds.failed_thresholds.new_tests,
+                                                failureThreshold: THRESHOLD_OBJ.unittests_thresholds.failed_thresholds.total_tests,
+                                                unstableNewThreshold: THRESHOLD_OBJ.unittests_thresholds.skipped_thresholds.new_tests,
+                                                unstableThreshold: THRESHOLD_OBJ.unittests_thresholds.skipped_thresholds.total_tests)],
+                                        tools: [Custom(customXSL: "${XUNIT_XSL_FILE}",
+                                                    deleteOutputFiles: false,
+                                                    excludesPattern: '',
+                                                    pattern: "**/unit_test_results/**/*.xml",
+                                                    skipNoTestFiles: true,
+                                                    stopProcessingIfError: true)]
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    stage('Static analysis') {
+
+                        steps {
+                            echo 'Running static analysis...'
+                            script {
+                                echo 'WARNING: Currently NOT failing on static analysis errors!'
+                                //TODO Remove the '| true' from the below invocation when errors are fixed
+                                runStage("${ML_FMWORK}-${PROC_TYPE}", "-s | true")
+                            }
+                        }
+                    }   
+                
+                }
+            }         
+        }
+
+
+
+        stage("AIMET extra ALL STAGES") {
+
+
+            steps {
+                script {
+                    if ("${env.QCInternalValidation}" == "true") {
+                        echo 'Running AIMET additional stages'
+                        callAimetExtra(env.CHANGE_TARGET)
+                    }
+                }
+            }    
+            
+        }
+
+        
+        
         stage('Matrix') {
             matrix {
                 axes {
