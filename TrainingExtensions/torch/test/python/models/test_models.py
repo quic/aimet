@@ -1473,3 +1473,116 @@ class ModelWithMultiInputOps(torch.nn.Module):
         x5 = self.concat(x1_bn, self.constant, x1)
         x6 = self.dynamic_conv(x5, weight, self.conv_bias)
         return x3, x6+2, x4
+
+
+class SmallMnist(nn.Module):
+    def __init__(self):
+        super(SmallMnist, self).__init__()
+        self.conv1 = nn.Conv2d(1, 10, kernel_size=5)
+        self.relu1 = nn.ReLU()
+        self.conv2 = nn.Conv2d(10, 20, kernel_size=5)
+        self.conv2_drop = nn.Dropout2d()
+        self.relu2 = nn.ReLU()
+        self.fc1 = nn.Linear(80, 50)
+        self.relu3 = nn.ReLU()
+        self.dropout = nn.Dropout()
+        self.fc2 = nn.Linear(50, 10)
+        self.log_softmax = nn.LogSoftmax(dim=1)
+
+    def forward(self, x):
+        x = self.relu1(self.conv1(x))
+        x = self.conv2(x)
+        x = self.relu2(self.conv2_drop(x))
+        x = x.view(-1, 80)
+        x = self.relu3(self.fc1(x))
+        x = self.dropout(x)
+        x = self.fc2(x)
+        return self.log_softmax(x)
+
+
+class ModelWithOneSplit(nn.Module):
+    def __init__(self):
+        super(ModelWithOneSplit, self).__init__()
+        self.conv1 = nn.Conv2d(1, 10, kernel_size=5)
+        self.conv2 = nn.Conv2d(10, 20, kernel_size=5)
+        self.conv3 = nn.Conv2d(10, 20, kernel_size=5)
+
+    def forward(self, x):
+        x = self.conv1(x)
+        y = self.conv2(x)
+        z = self.conv3(x)
+        return z
+
+
+class ModelWithMatMul3(nn.Module):
+    def __init__(self):
+        super(ModelWithMatMul3, self).__init__()
+        self.matmul_1 = aimet_modules.MatMul()
+
+    def forward(self, x, y):
+        y = self.matmul_1(x, y)
+        return y
+
+
+class ModelWithFlatten(nn.Module):
+    def __init__(self):
+        super(ModelWithFlatten, self).__init__()
+        self.conv_1 = torch.nn.Conv2d(3, 8, kernel_size=2, stride=2,
+                                      padding=2, bias=False)
+        self.maxpool_1 = nn.MaxPool2d(2)
+        self.relu_1 = torch.nn.ReLU(inplace=True)
+        self.fc_1 = torch.nn.Linear(1, 10, bias=False)
+
+    def forward(self, x):
+        x = self.relu_1(self.maxpool_1(self.conv_1(x)))
+        x = torch.reshape(x, shape=(1, 648))
+        x = torch.transpose(x, 0, 1)
+        x = self.fc_1(x)
+        return x
+
+
+class ModelWithSeveralDataMovementOps(nn.Module):
+    def __init__(self):
+        super(ModelWithSeveralDataMovementOps, self).__init__()
+        self.conv_1 = torch.nn.Conv2d(3, 8, kernel_size=2, stride=2,
+                                      padding=2, bias=False)
+        self.maxpool_1 = nn.MaxPool2d(2)
+        self.fc_1 = torch.nn.Linear(648, 10, bias=False)
+        self.fc_2 = torch.nn.Linear(10, 10, bias=False)
+        self.fc_3 = torch.nn.Linear(9, 10, bias=False)
+
+    def forward(self, x):
+        y = self.maxpool_1(self.conv_1(x))
+        # branch 1
+        x = torch.reshape(y, shape=(1, 648))
+        x = self.fc_1(x)
+        x = self.fc_2(x)
+        x = torch.reshape(x, shape=(1, 10))
+        x = torch.transpose(x, 0, 1)
+        # branch 2
+        y = self.fc_3(y)
+        x = y + torch.transpose(x, 0, 1)
+        return x
+
+
+class ModelWithTwoInputsTwoOutputs(nn.Module):
+    def __init__(self):
+        super(ModelWithTwoInputsTwoOutputs, self).__init__()
+        self.conv1_a = nn.Conv2d(1, 10, kernel_size=5)
+        self.maxpool1_a = nn.MaxPool2d(2)
+        self.relu1_a = nn.ReLU()
+
+        self.conv1_b = nn.Conv2d(1, 10, kernel_size=5)
+        self.maxpool1_b = nn.MaxPool2d(2)
+        self.relu1_b = nn.ReLU()
+
+        self.conv2 = nn.Conv2d(10, 20, kernel_size=5)
+        self.maxpool2 = nn.MaxPool2d(2)
+        self.relu2 = nn.ReLU()
+
+    def forward(self, x1, x2):
+        x1 = self.relu1_a(self.maxpool1_a(self.conv1_a(x1)))
+        x2 = self.relu1_b(self.maxpool1_b(self.conv1_b(x2)))
+        return x1, x2
+
+
