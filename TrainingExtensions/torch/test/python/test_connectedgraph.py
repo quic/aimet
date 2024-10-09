@@ -1015,3 +1015,21 @@ class TestConnectedGraphUtils(unittest.TestCase):
         assert len(add_1.inputs) == 2
         assert add_1.inputs == [p3, p4]
         assert p5.name not in mcg._products.keys()
+
+    def test_custom_ops_to_treat_as_leaf_module(self):
+        class RMSNormModel(torch.nn.Module):
+            def __init__(self):
+                super(RMSNormModel, self).__init__()
+                self.rms_norm_0 = aimet_modules.RmsNorm([5, 2, 3], [2], 1e-5)
+
+            def forward(self, inp):
+                x = self.rms_norm_0(inp)
+                return x
+
+        model = RMSNormModel()
+        dummy_input = torch.randn(5, 2, 3)
+
+        cg = ConnectedGraph(model, dummy_input)
+        assert len(cg.get_all_ops()) == 1
+        assert cg.ordered_ops[0].inputs[0].is_model_input
+        assert cg.ordered_ops[0].get_module() == model.rms_norm_0
