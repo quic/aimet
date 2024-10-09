@@ -52,10 +52,9 @@ from aimet_common import quantsim
 from aimet_common import libquant_info
 from aimet_common.defs import QuantScheme, QuantizationDataType, EncodingType
 from aimet_common.quantsim_config.utils import get_path_for_per_channel_config
-from aimet_onnx.quantsim import QuantizationSimModel, load_encodings_to_sim, set_blockwise_quantization_for_weights
+from aimet_onnx.quantsim import QuantizationSimModel, load_encodings_to_sim, set_blockwise_quantization_for_weights, _apply_constraints
 from aimet_onnx.qc_quantize_op import OpMode
 from aimet_onnx.utils import make_dummy_input
-from aimet_onnx import utils
 from models.models_for_tests import SingleResidual
 from models import models_for_tests, test_models
 from models.models_for_tests import build_dummy_model, single_residual_model, BNAfterConv, multi_input_with_constant_model , multi_output_model, custom_add_model, build_lstm_gru_dummy_model, \
@@ -1289,7 +1288,6 @@ class TestEncodingPropagation:
                 self.relu1 = torch.nn.ReLU()
                 self.conv2 = torch.nn.Conv2d(3,3,3)
                 self.relu2 = torch.nn.ReLU()
-                self.cat = Concat()
 
             def forward(self, x):
                 x1 = x2 = x
@@ -1297,9 +1295,9 @@ class TestEncodingPropagation:
                 x1 = self.relu1(x1)
                 x2 = self.conv2(x2)
                 x2 = self.relu2(x2)
-                return self.cat(x1, x2)
+                return torch.cat([x1, x2])
         """
-       When: op_types_to_tie=('Concat', )
+       When: _apply_constraints(True)
 
        Then: q_out1 and q_out2 are replaced with q_out3 as below
 
@@ -1311,13 +1309,14 @@ class TestEncodingPropagation:
         x = torch.randn(1, 3, 24, 24)
         model = _convert_to_onnx(pt_model, x)
         dummy_input = make_dummy_input(model.model)
-        sim = QuantizationSimModel(model, dummy_input, op_types_to_tie=('Concat',))
+        with _apply_constraints(True):
+            sim = QuantizationSimModel(model, dummy_input)
 
-        sim.compute_encodings(lambda session, _: session.run(None, dummy_input), None)
-        assert _compare_encodings(sim.qc_quantize_op_dict['/relu1/Relu_output_0'].encodings[0],
-                                  sim.qc_quantize_op_dict['output'].encodings[0])
-        assert _compare_encodings(sim.qc_quantize_op_dict['/relu2/Relu_output_0'].encodings[0],
-                                  sim.qc_quantize_op_dict['output'].encodings[0])
+            sim.compute_encodings(lambda session, _: session.run(None, dummy_input), None)
+            assert _compare_encodings(sim.qc_quantize_op_dict['/relu1/Relu_output_0'].encodings[0],
+                                      sim.qc_quantize_op_dict['output'].encodings[0])
+            assert _compare_encodings(sim.qc_quantize_op_dict['/relu2/Relu_output_0'].encodings[0],
+                                      sim.qc_quantize_op_dict['output'].encodings[0])
 
     def test_math_invariant(self):
         """
@@ -1332,7 +1331,6 @@ class TestEncodingPropagation:
                 super().__init__()
                 self.conv1 = torch.nn.Conv2d(3, 3, 3, padding=1)
                 self.relu1 = torch.nn.ReLU()
-                self.cat = Concat()
 
             def forward(self, x):
                 x1 = x2 = x
@@ -1340,9 +1338,9 @@ class TestEncodingPropagation:
                 x1 = self.relu1(x1)
                 x2 = torch.reshape(x2, (-1, 24, 24, 3))
                 x2 = torch.permute(x2, (0, 3, 1, 2))
-                return self.cat(x1, x2)
+                return torch.cat([x1, x2])
         """
-        When: op_types_to_tie=('Concat', )
+        When: _apply_constraints(True)
 
         Then: q_out1 and q_in2 are replaced with q_out3 as below
 
@@ -1354,13 +1352,14 @@ class TestEncodingPropagation:
         dummy_input = torch.randn(1, 3, 24, 24)
         model = _convert_to_onnx(pt_model, dummy_input)
         dummy_input = make_dummy_input(model.model)
-        sim = QuantizationSimModel(model, dummy_input, op_types_to_tie=('Concat', ))
-        sim.compute_encodings(lambda session, _: session.run(None, dummy_input), None)
+        with _apply_constraints(True):
+            sim = QuantizationSimModel(model, dummy_input)
+            sim.compute_encodings(lambda session, _: session.run(None, dummy_input), None)
 
-        assert _compare_encodings(sim.qc_quantize_op_dict['/relu1/Relu_output_0'].encodings[0],
-                                  sim.qc_quantize_op_dict['output'].encodings[0])
-        assert _compare_encodings(sim.qc_quantize_op_dict['input'].encodings[0],
-                                  sim.qc_quantize_op_dict['output'].encodings[0])
+            assert _compare_encodings(sim.qc_quantize_op_dict['/relu1/Relu_output_0'].encodings[0],
+                                      sim.qc_quantize_op_dict['output'].encodings[0])
+            assert _compare_encodings(sim.qc_quantize_op_dict['input'].encodings[0],
+                                      sim.qc_quantize_op_dict['output'].encodings[0])
 
     def test_concat_tree(self):
         """
@@ -1397,7 +1396,7 @@ class TestEncodingPropagation:
         model = _convert_to_onnx(pt_model, dummy_input)
         dummy_input = make_dummy_input(model.model)
         """
-        When: op_types_to_tie=('Concat',)
+        When: _apply_constraints(True)
 
         Then: All q_out{*} are replaced with q_out3 as below
 
@@ -1407,13 +1406,14 @@ class TestEncodingPropagation:
                     +-> q_in2a -> conv2a -> *q_out3* -> concat2 -> *q_out3* -------------^
                     +-> q_in2b -> conv2b -> *q_out3* ------^
         """
-        sim = QuantizationSimModel(model, dummy_input, op_types_to_tie=('Concat',))
-        sim.compute_encodings(lambda session, _: session.run(None, dummy_input), None)
+        with _apply_constraints(True):
+            sim = QuantizationSimModel(model, dummy_input)
+            sim.compute_encodings(lambda session, _: session.run(None, dummy_input), None)
 
-        for cg_op in sim.connected_graph.ordered_ops:
-            if cg_op.type in ['Conv', 'Concat']:
-                _, out_qtzr, __ = sim.get_op_quantizers(cg_op)
-                assert _compare_encodings(out_qtzr[0].encodings[0], sim.qc_quantize_op_dict['output'].encodings[0])
+            for cg_op in sim.connected_graph.ordered_ops:
+                if cg_op.type in ['Conv', 'Concat']:
+                    _, out_qtzr, __ = sim.get_op_quantizers(cg_op)
+                    assert _compare_encodings(out_qtzr[0].encodings[0], sim.qc_quantize_op_dict['output'].encodings[0])
 
     @pytest.mark.parametrize('op_type_under_test', [torch.nn.MaxPool2d, torch.nn.AvgPool2d, torch.nn.Upsample])
     def test_output_parametrized(self, op_type_under_test):
@@ -1430,7 +1430,7 @@ class TestEncodingPropagation:
                 x1 = self.conv1(x)
                 return self.op_type_under_test(x1)
         """
-       When: op_types_to_tie=('op_type_under_test',)
+       When: _apply_constraints(True)
 
        Then: q_out1 will be replaced with q_out2 as below
        
@@ -1441,19 +1441,11 @@ class TestEncodingPropagation:
         x = torch.randn(1, 3, 24, 24)
         model = _convert_to_onnx(pt_model, x)
         dummy_input = make_dummy_input(model.model)
-        if isinstance(pt_model.op_type_under_test, torch.nn.MaxPool2d):
-            op_type = "MaxPool"
-        elif isinstance(pt_model.op_type_under_test, torch.nn.AvgPool2d):
-            op_type = "AveragePool"
-        elif isinstance(pt_model.op_type_under_test, torch.nn.Upsample):
-            op_type = "Resize"
-        else:
-            raise ValueError(f"Unsupported op_type")
+        with _apply_constraints(True):
+            sim = QuantizationSimModel(model, dummy_input)
+            sim.compute_encodings(lambda session, _: session.run(None, dummy_input), None)
 
-        sim = QuantizationSimModel(model, dummy_input, op_types_to_tie=op_type)
-        sim.compute_encodings(lambda session, _: session.run(None, dummy_input), None)
-
-        for cg_op in sim.connected_graph.ordered_ops:
-            if cg_op.type in ['Conv']:
-                _, out_qtzr, __ = sim.get_op_quantizers(cg_op)
-                assert _compare_encodings(out_qtzr[0].encodings[0], sim.qc_quantize_op_dict['output'].encodings[0])
+            for cg_op in sim.connected_graph.ordered_ops:
+                if cg_op.type in ['Conv']:
+                    _, out_qtzr, __ = sim.get_op_quantizers(cg_op)
+                    assert _compare_encodings(out_qtzr[0].encodings[0], sim.qc_quantize_op_dict['output'].encodings[0])
