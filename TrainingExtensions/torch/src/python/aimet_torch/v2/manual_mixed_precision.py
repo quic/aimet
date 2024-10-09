@@ -36,23 +36,15 @@
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
 """ Manual mixed precision configurator """
-from typing import overload, Union, Literal, TypeAlias, List, Tuple, Dict, get_args, Type
-from dataclasses import dataclass, field
+
+from typing import overload, Union, List, Dict, get_args, Type, Optional
 import torch
 
-from aimet_common.defs import QuantizationDataType
+from aimet_common.utils import AimetLogger
+from aimet_torch.v2.mixed_precision.utils import UserRequest, RequestType, SupportedDType, MpHandler
 from aimet_torch.v2.quantsim import QuantizationSimModel
 
-SupportedDType: TypeAlias = Literal['Int16', 'Int8', 'Int4', 'Fp16']
-
-
-@dataclass
-class MpRequest:
-    """ Internal data structure to save the request to act upon"""
-    id: int = -1  # original request ID
-    input_candidates: List[Tuple[QuantizationDataType, int]] = field(default_factory=list)
-    output_candidate: Tuple[QuantizationDataType, int] = field(default_factory=tuple)
-    param_candidate: Dict[str, Tuple[QuantizationDataType, int]] = field(default_factory=dict)
+logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
 
 
 class MixedPrecisionConfigurator:
@@ -73,21 +65,38 @@ class MixedPrecisionConfigurator:
         :param sim: QuantSim object
         """
         self._sim = sim
+        self.request_count = 0
+        self.user_requests: Dict[int, UserRequest] = {}
+        self.mp_handler = MpHandler(sim)
+
+    def _store_user_request(self, request_type: RequestType, module: Union[torch.nn.Module, Type],
+                            activation: Union[List[SupportedDType], SupportedDType] = None,
+                            param: Optional[Dict[str, SupportedDType]] = None):
+        self.user_requests[self.request_count] = UserRequest(request_type=request_type,
+                                                             module=module,
+                                                             activation=activation,
+                                                             param=param)
+        self.request_count += 1
 
     @overload
-    def set_precision(self, module: torch.nn.Module, act_candidate: SupportedDType = None,
-                      param_candidate: SupportedDType = None): ...
+    def set_precision(self, module: torch.nn.Module,
+                      activation: Union[List[SupportedDType], SupportedDType, None] = None,
+                      param: Optional[Dict[str, SupportedDType]] = None):
+        ...
 
     @overload
-    def set_precision(self, module: Type[torch.nn.Module], act_candidate: SupportedDType = None,
-                      param_candidate: SupportedDType = None): ...
+    def set_precision(self, module_type: Type[torch.nn.Module],
+                      activation: Union[List[SupportedDType], SupportedDType, None] = None,
+                      param: Optional[Dict[str, SupportedDType]] = None):
+        ...
 
-    def set_precision(self, module: Union[torch.nn.Module, Type[torch.nn.Module]], act_candidate: SupportedDType = None,
-                      param_candidate: SupportedDType = None):
+    def set_precision(self, arg: Union[torch.nn.Module, Type[torch.nn.Module]],
+                      activation: Union[List[SupportedDType], SupportedDType, None] = None,
+                      param: Optional[Dict[str, SupportedDType]] = None):
         """
-        :param module: Module can be of type torch.nn.Module or the type of the module.
-        :param act_candidate: A string representing the activation dtype of the module(s)
-        :param param_candidate: A string representing the param dtype of the module(s)
+        :param arg: Module can be of type torch.nn.Module or the type of the module.
+        :param activation: A string representing the activation dtype of the module(s)
+        :param param: Dict with name of the param as key and its dtype as value
 
         - If the 'module' is a leaf-module(the module doesnt compose of other torch.nn.module), the specified settings
         would be applied to the module.
@@ -101,25 +110,44 @@ class MixedPrecisionConfigurator:
 
         """
 
-        if act_candidate and act_candidate not in get_args(SupportedDType):
-            raise ValueError("Supported inputs for act_candidate are ", get_args(SupportedDType))
-        if param_candidate and param_candidate not in get_args(SupportedDType):
-            raise ValueError("Supported inputs for param_candidate are ", get_args(SupportedDType))
+        if activation:
+            if isinstance(activation, List):
+                for act in activation:
+                    if act not in get_args(SupportedDType):
+                        raise ValueError("Supported inputs for activation are ", get_args(SupportedDType))
+            else:
+                if activation not in get_args(SupportedDType):
+                    raise ValueError("Supported inputs for activation are ", get_args(SupportedDType))
+        if param:
+            for param_name, dtype in param.items():
+                if dtype not in get_args(SupportedDType):
+                    raise ValueError(f"Supported inputs for param: {param_name} are ", get_args(SupportedDType))
 
-        assert module in self._sim.model.modules()
+        if isinstance(arg, type):
+            self._store_user_request(RequestType.set_precision_by_module_type, arg, activation, param)
+        elif isinstance(arg, torch.nn.Module):
+            if arg in self._sim.model.modules():
+                self._store_user_request(RequestType.set_precision_by_module, arg, activation, param)
+            else:
+                raise ValueError(f"Specified module {arg} is not part of the sim object")
+        else:
+            raise TypeError("arg is neither a torch.nn.Module nor of Type[torch.nn.Module]")
 
-
-    def set_model_input_precision(self, act_candidate):
+    def set_model_input_precision(self, activation):
         """
         Activation precision which needs to be set to the model inputs
-        :param act_candidate: Activation dtypes for all the inputs of the model
+        :param activation: Activation dtypes for all the inputs of the model
         """
+        # self._store_user_request(RequestType.set_model_input_precision, None, activation, None)
+        raise NotImplementedError("set_model_input_precision(...) is not yet supported")
 
-    def set_model_output_precision(self, act_candidate):
+    def set_model_output_precision(self, activation):
         """
         Activation precision which needs to be set to the model outputs
-        :param act_candidate: Activation dtypes for all the outputs of the model
+        :param activation: Activation dtypes for all the outputs of the model
         """
+        # self._store_user_request(RequestType.set_model_output_precision, None, activation, None)
+        raise NotImplementedError("set_model_output_precision(...) is not yet supported")
 
     def apply(self, config: str = "", strict: bool = True, log_file: str = './mmp_log.txt'):
         """
@@ -130,3 +158,6 @@ class MixedPrecisionConfigurator:
         the user or (strict=False) take a best-effort approach to realize the MP settings
         :param log_file: Log file to store the logs
         """
+        self.mp_handler.apply(self.user_requests, config, strict, log_file)
+        self.user_requests = {}
+        self.request_count = 0

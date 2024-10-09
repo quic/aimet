@@ -39,6 +39,7 @@
 import pytest
 import torch
 
+from aimet_common.defs import QuantizationDataType
 from aimet_torch.v2.quantsim import QuantizationSimModel
 from aimet_torch.v2.manual_mixed_precision import MixedPrecisionConfigurator
 from .models_.test_models import SingleResidual
@@ -61,13 +62,15 @@ class TestManualMixedPrecisionConfigurator:
         mp_configurator = MixedPrecisionConfigurator(sim)
 
         # 3. Make set_precision/set_model_input_precision/set_model_output_precision calls
-        mp_configurator.set_precision(sim.model.conv1, 'Int16', 'Int16')
+        mp_configurator.set_precision(sim.model.conv1, 'Int16', {'weight': 'Int16'})
+        mp_configurator.set_precision(torch.nn.Conv2d, 'Int8', {'weight': 'Int8'})
 
         # 4. Call apply() method by passing in the config file and strict flag
         mp_configurator.apply()
         assert mp_configurator
 
         # 5. compute encodings and export
+
 
     def test_mp_2(self):
         model = SingleResidual()
@@ -78,6 +81,84 @@ class TestManualMixedPrecisionConfigurator:
 
         sim = QuantizationSimModel(model, input_tensor)
         mp_configurator = MixedPrecisionConfigurator(sim)
-        mp_configurator.set_precision(sim.model.conv1, 'Int16', 'Int16')
+        mp_configurator.set_precision(sim.model.conv1, 'Int16', {'weight': 'Int16'})
         with pytest.raises(ValueError):
-            mp_configurator.set_precision(sim.model.maxpool, act_candidate='Int2')
+            mp_configurator.set_precision(sim.model.maxpool, activation='Int2')
+
+    def test_mp_4(self):
+        """
+        Test over-writing old requests with new requests
+        - test over-writing all Conv2d modules with Int8/Int8, after setting one to Int16/Int16
+        """
+        model = SingleResidual()
+
+        torch.manual_seed(0)
+        input_tensor = torch.randn((1, 3, 32, 32))
+        sim = QuantizationSimModel(model, input_tensor)
+
+        mp_configurator = MixedPrecisionConfigurator(sim)
+
+        mp_configurator.set_precision(sim.model.conv1, 'Int16', {'weight': 'Int16'})
+        mp_configurator.set_precision(torch.nn.Conv2d, 'Int8', {'weight': 'Int8'})
+
+        mp_requests = mp_configurator.mp_handler._process_user_requests(mp_configurator.user_requests)
+        assert len(mp_requests) == 4
+        for m, request in mp_requests.items():
+            assert request.input_candidates == (QuantizationDataType.int, 8)
+            assert request.output_candidates == (QuantizationDataType.int, 8)
+            assert request.param_candidate == {'weight': (QuantizationDataType.int, 8)}
+
+
+    def test_mp_5(self):
+        """
+        Test over-writing old requests with new requests
+        - test over-writing all modules with Fp16/Fp16, after setting few of them to different configurations
+        """
+        model = SingleResidual()
+
+        torch.manual_seed(0)
+        input_tensor = torch.randn((1, 3, 32, 32))
+        sim = QuantizationSimModel(model, input_tensor)
+
+        mp_configurator = MixedPrecisionConfigurator(sim)
+
+        mp_configurator.set_precision(sim.model.conv1, 'Int16', {'weight': 'Int16'})
+        mp_configurator.set_precision(torch.nn.Conv2d, 'Int8', {'weight': 'Int8'})
+        mp_configurator.set_precision(sim.model, 'Fp16', {'weight': 'Fp16'})
+
+        mp_requests = mp_configurator.mp_handler._process_user_requests(mp_configurator.user_requests)
+        assert len(mp_requests) == 13
+        for m, request in mp_requests.items():
+            assert request.input_candidates == (QuantizationDataType.float, 16)
+            assert request.output_candidates == (QuantizationDataType.float, 16)
+            assert request.param_candidate == {'weight': (QuantizationDataType.float, 16)}
+
+    def test_mp_6(self):
+        """
+        Test over-writing old requests with new requests
+        - test over-riding Conv2d to Int8 after setting entire model to FP16
+        """
+        model = SingleResidual()
+
+        torch.manual_seed(0)
+        input_tensor = torch.randn((1, 3, 32, 32))
+        sim = QuantizationSimModel(model, input_tensor)
+
+        mp_configurator = MixedPrecisionConfigurator(sim)
+
+        mp_configurator.set_precision(sim.model, 'Fp16', {'weight': 'Fp16'})
+        mp_configurator.set_precision(torch.nn.Conv2d, 'Int8', {'weight': 'Int8'})
+
+        mp_requests = mp_configurator.mp_handler._process_user_requests(mp_configurator.user_requests)
+        assert len(mp_requests) == 13
+        for m, request in mp_requests.items():
+            if isinstance(m.get_original_module(), torch.nn.modules.Conv2d):
+                assert request.input_candidates == (QuantizationDataType.int, 8)
+                assert request.output_candidates == (QuantizationDataType.int, 8)
+                assert request.param_candidate == {'weight': (QuantizationDataType.int, 8)}
+            else:
+                assert request.input_candidates == (QuantizationDataType.float, 16)
+                assert request.output_candidates == (QuantizationDataType.float, 16)
+                assert request.param_candidate == {'weight': (QuantizationDataType.float, 16)}
+
+        mp_configurator.mp_handler.mp_requests = {}
