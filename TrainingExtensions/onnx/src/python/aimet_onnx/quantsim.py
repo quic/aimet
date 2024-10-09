@@ -36,6 +36,7 @@
 # =============================================================================
 """ Implementation for simulating models running on Quantized hardware """
 
+import contextlib
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
@@ -84,7 +85,30 @@ op_params_to_ignore = ['Resize']
 
 allowed_op_type_for_per_channel = ['Conv', 'Gemm', 'MatMul', 'ConvTranspose']
 
+# List of op types whose input and output quantizers to be tied
+op_types_to_tie_qtzrs = ['Concat', 'MaxPool', 'AveragePool', 'Resize']
+_tie_qtzrs = False
+
 data_types_to_quantize = [np.float32]
+
+
+@contextlib.contextmanager
+def _apply_constraints(flag: bool):
+    """
+    Apply runtime specific constraints.
+    For certain ``op_types_to_tie_qtzrs``, runtime has constraints to have same encodings for
+     input and output quantizers.
+
+    NOTE: Default setting doesn't apply these constraints.
+    """
+    global _tie_qtzrs # pylint: disable=global-statement
+    orig_flag = _tie_qtzrs
+    try:
+        _tie_qtzrs = flag
+        yield
+    finally:
+        _tie_qtzrs = orig_flag
+
 
 @dataclass
 class EncodingMismatchInfo:
@@ -127,8 +151,7 @@ class QuantizationSimModel:
                  use_symmetric_encodings: bool = False, use_cuda: bool = True,
                  device: int = 0, config_file: str = None,
                  default_data_type: QuantizationDataType = QuantizationDataType.int,
-                 simplify_model: bool = True, user_onnx_libs: List[str] = None,
-                 path: str = None, op_types_to_tie: Union[str, Tuple] = None):
+                 simplify_model: bool = True, user_onnx_libs: List[str] = None, path: str = None):
         """
         Constructor
 
@@ -148,7 +171,6 @@ class QuantizationSimModel:
         :param simplify_model: Default True, uses onnx simplifier to simplify model
         :param user_onnx_libs: List of paths to all compiled ONNX custom ops libraries
         :param path: Directory to save the artifacts.
-        :param op_types_to_tie: Operator types for which to tie input and output quantizers
         """
         self.model = model
         if not isinstance(model, ONNXModel):
@@ -180,7 +202,6 @@ class QuantizationSimModel:
         else:
             self._op_domain = "aimet.customop.cpu"
             self.providers = ['CPUExecutionProvider']
-        self._op_types_to_tie = op_types_to_tie
         self._user_onnx_libs = user_onnx_libs
         self.param_names = []
         self.input_quantizers_name = []
@@ -792,10 +813,9 @@ class QuantizationSimModel:
         """
         Tie the input and output quantizers for given op types.
         """
-        if not self._op_types_to_tie:
+        if not _tie_qtzrs:
             return
 
-        op_types_to_tie = self._op_types_to_tie
         cg = self.connected_graph
 
         def _set_quant_info(dst_qtzr_node_name: str, src_qtzr: QcQuantizeOp):
@@ -858,11 +878,8 @@ class QuantizationSimModel:
                 for inp in producer.inputs:
                     _set_src_qtzr(inp, consumer=producer, src_qtzr=src_qtzr)
 
-        if isinstance(op_types_to_tie, str):
-            op_types_to_tie = (op_types_to_tie, )
-
         for op in reversed(cg.ordered_ops):
-            if op.type not in op_types_to_tie:
+            if op.type not in op_types_to_tie_qtzrs:
                 continue
 
             _, out_qtzr, __ = self.get_op_quantizers(op)
