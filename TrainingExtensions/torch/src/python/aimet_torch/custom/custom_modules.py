@@ -256,7 +256,7 @@ def is_spconv_module(module):
     """
     # pylint: disable=protected-access
     spconv_modules = (spconv.SparseModule, )
-    if isinstance(module, aimet_torch.qc_quantize_op.QcQuantizeWrapper):
+    if isinstance(module, aimet_torch.v1.qc_quantize_op.QcQuantizeWrapper):
         return isinstance(module._module_to_wrap, spconv_modules)
     return isinstance(module, spconv_modules)
 

@@ -50,7 +50,7 @@ from aimet_common.amp.quantizer_groups import QuantizerGroupBase, get_supported_
     compute_baseline_candidate_options
 
 from aimet_torch.meta.connectedgraph import ConnectedGraph
-from aimet_torch.qc_quantize_op import QcQuantizeWrapper
+from aimet_torch.v1.qc_quantize_op import QcQuantizeWrapper
 from aimet_torch.v1.quantsim import QuantizationSimModel
 from aimet_torch import onnx_utils
 from aimet_torch.translation_mapping import aimet_op_to_backend_op_name_map

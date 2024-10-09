@@ -45,7 +45,7 @@ import aimet_common.libpymo as libpymo
 from aimet_common.utils import AimetLogger
 from aimet_common.defs import QuantScheme
 from aimet_torch.v1.quantsim import QuantizationSimModel
-from aimet_torch.qc_quantize_op import QcQuantizeWrapper, StaticGridQuantWrapper
+from aimet_torch.v1.qc_quantize_op import QcQuantizeWrapper, StaticGridQuantWrapper
 from models.test_models import TinyModel
 from aimet_torch.utils import create_fake_data_loader
 from aimet_torch.v1.adaround.activation_sampler import ActivationSampler

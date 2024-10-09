@@ -46,7 +46,7 @@ from torch.utils.data import Dataset, DataLoader
 
 from aimet_torch.utils import create_fake_data_loader
 from aimet_torch.v1.quantsim import QuantizationSimModel
-from aimet_torch.qc_quantize_op import StaticGridQuantWrapper, QuantScheme
+from aimet_torch.v1.qc_quantize_op import StaticGridQuantWrapper, QuantScheme
 from aimet_torch.v1.seq_mse import  apply_seq_mse, get_candidates, optimize_module, SeqMseParams
 from models.mnist_torch_model import Net
 

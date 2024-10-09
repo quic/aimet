@@ -68,12 +68,12 @@ from models.test_models import TwoLayerBidirectionalLSTMModel, SingleLayerRNNMod
     ModelWithTwoInputs, SimpleConditional, RoiModel, InputOutputDictModel, Conv3dModel, SmallLinearModel
 from aimet_torch.meta.connectedgraph import ConnectedGraph
 from aimet_torch.onnx_utils import OnnxExportApiArgs
-from aimet_torch.qc_quantize_op import QcQuantizeWrapper, QcQuantizeStandalone, \
+from aimet_torch.v1.qc_quantize_op import QcQuantizeWrapper, QcQuantizeStandalone, \
     StaticGridQuantWrapper, QcQuantizeOpMode, LearnedGridQuantWrapper, enable_recompute, no_recompute
-from aimet_torch.qc_quantize_recurrent import QcQuantizeRecurrent
+from aimet_torch.v1.qc_quantize_recurrent import QcQuantizeRecurrent
 from aimet_torch.v1.quantsim import QuantizationSimModel, check_accumulator_overflow, load_encodings_to_sim, \
     has_valid_encodings, compute_encodings_for_sims
-from aimet_torch.quantsim_straight_through_grad import compute_dloss_by_dx
+from aimet_torch.v1.quantsim_straight_through_grad import compute_dloss_by_dx
 from aimet_torch.v1.nn.modules.custom import DynamicConv2d
 
 from models import test_models

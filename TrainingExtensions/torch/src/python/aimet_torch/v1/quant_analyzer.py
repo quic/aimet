@@ -49,9 +49,9 @@ from aimet_common.quant_analyzer import save_json, export_per_layer_sensitivity_
 from aimet_common.utils import AimetLogger, CallbackFunc
 from aimet_common.defs import QuantScheme
 from aimet_torch import utils
-from aimet_torch.tensor_quantizer import TensorQuantizer, StaticGridTensorQuantizer
-from aimet_torch.qc_quantize_op import QcQuantizeWrapper
-from aimet_torch.qc_quantize_recurrent import QcQuantizeRecurrent
+from aimet_torch.v1.tensor_quantizer import TensorQuantizer, StaticGridTensorQuantizer
+from aimet_torch.v1.qc_quantize_op import QcQuantizeWrapper
+from aimet_torch.v1.qc_quantize_recurrent import QcQuantizeRecurrent
 from aimet_torch.v1.quantsim import QuantizationSimModel
 from aimet_torch.batch_norm_fold import fold_all_batch_norms
 

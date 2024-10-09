@@ -54,7 +54,7 @@ from aimet_torch.v1.quantsim import ExportableQuantModule, QuantizationSimModel
 from aimet_torch import utils
 from aimet_torch import torchscript_utils
 from aimet_torch.onnx_utils import OnnxSaver, OnnxExportApiArgs
-from aimet_torch.qc_quantize_recurrent import QcQuantizeRecurrent
+from aimet_torch.v1.qc_quantize_recurrent import QcQuantizeRecurrent
 from aimet_torch.v2.nn.base import BaseQuantizationMixin
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.LayerOutputs)

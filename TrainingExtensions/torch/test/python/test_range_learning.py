@@ -38,7 +38,7 @@ import pytest
 import torch
 
 from aimet_common.defs import QuantScheme, QuantizationDataType
-from aimet_torch.tensor_quantizer import LearnedGridTensorQuantizer
+from aimet_torch.v1.tensor_quantizer import LearnedGridTensorQuantizer
 
 
 class STE(torch.autograd.Function):

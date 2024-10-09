@@ -132,7 +132,7 @@ In aimet_torch v1, we relied on StaticGridQuantizer and LearnedGridQuantizer. Fo
 
 .. code-block:: Python
 
-    from aimet_torch.tensor_quantizer import StaticGridPerChannelQuantizers
+    from aimet_torch.v1.tensor_quantizer import StaticGridPerChannelQuantizers
     from aimet_common.defs import QuantizationDataType
 
     fp_quantizer = StaticGridPerChannelQuantizer(data_type = QuantizationDataType.float, ...)

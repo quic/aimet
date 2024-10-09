@@ -50,10 +50,10 @@ from aimet_torch.v1.quantsim import QuantizationSimModel
 import aimet_torch.v1.quantsim
 from aimet_torch.quantsim_config import quantsim_config as qsim_config
 from aimet_torch.quantsim_config.quantsim_config import get_all_ops_in_neighborhood
-from aimet_torch.qc_quantize_op import QcQuantizeWrapper
+from aimet_torch.v1.qc_quantize_op import QcQuantizeWrapper
 from aimet_torch import utils
 from aimet_torch.meta.connectedgraph import ConnectedGraph
-from aimet_torch.tensor_quantizer import StaticGridPerTensorQuantizer, StaticGridPerChannelQuantizer
+from aimet_torch.v1.tensor_quantizer import StaticGridPerTensorQuantizer, StaticGridPerChannelQuantizer
 from aimet_torch.v1.nn.modules.custom import Add
 from models import test_models
 
@@ -1268,7 +1268,7 @@ class TestQuantsimConfig:
             sim.compute_encodings(forward_pass, None)
 
             #  check quantizer added to parameters of LayerNorm
-            from aimet_torch.qc_quantize_op import StaticGridPerTensorQuantizer
+            from aimet_torch.v1.qc_quantize_op import StaticGridPerTensorQuantizer
             assert(isinstance(sim.model.ln1.param_quantizers['weight'], StaticGridPerTensorQuantizer))
             assert(isinstance(sim.model.ln1.param_quantizers['bias'], StaticGridPerTensorQuantizer))
 

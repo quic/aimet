@@ -44,7 +44,7 @@ import copy
 
 from aimet_torch.v1.quantsim import QuantizationSimModel, load_checkpoint, save_checkpoint
 import models.mnist_torch_model as mnist_model
-from aimet_torch.qc_quantize_op import StaticGridQuantWrapper
+from aimet_torch.v1.qc_quantize_op import StaticGridQuantWrapper
 from aimet_common.defs import QuantScheme, QuantizationDataType
 path = str('../data')
 filename_prefix = 'quantized_mnist'

@@ -42,7 +42,7 @@ import itertools
 from unittest.mock import patch, MagicMock
 import os
 from bs4 import BeautifulSoup
-from aimet_torch.qc_quantize_op import StaticGridQuantWrapper
+from aimet_torch.v1.qc_quantize_op import StaticGridQuantWrapper
 import pytest
 from typing import Callable
 import torch
@@ -53,7 +53,7 @@ from aimet_torch.model_preparer import prepare_model
 from aimet_torch.v1.auto_quant import AutoQuant
 from aimet_torch.v1.adaround.adaround_weight import AdaroundParameters
 from aimet_torch.v1.quantsim import QuantizationSimModel, OnnxExportApiArgs
-from aimet_torch.qc_quantize_op import StaticGridQuantWrapper
+from aimet_torch.v1.qc_quantize_op import StaticGridQuantWrapper
 from aimet_torch.save_utils import SaveUtils
 from aimet_common.defs import QuantScheme
 

@@ -44,7 +44,7 @@ import os
 import pickle
 import shutil
 import json
-from aimet_torch.qc_quantize_op import QcQuantizeWrapper
+from aimet_torch.v1.qc_quantize_op import QcQuantizeWrapper
 import numpy as np
 import math
 import functools

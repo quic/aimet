@@ -53,8 +53,8 @@ from aimet_common.quantsim_config.json_config_importer import ConfigDictKeys, Co
 from aimet_common.quantsim_config.quantsim_config import QuantSimConfigurator as AimetCommonQuantSimConfigurator, \
     get_all_ops_in_neighborhood, get_setting_type, ENFORCE_TARGET_DTYPE_BITWIDTH_CONFIG, reformat_supported_kernels
 from aimet_common.quantsim_config.quantsim_config import SupergroupConfigCallback as AimetCommonSupergroupConfigCallback
-from aimet_torch.qc_quantize_op import QcQuantizeWrapper
-from aimet_torch.tensor_quantizer import TensorQuantizer
+from aimet_torch.v1.qc_quantize_op import QcQuantizeWrapper
+from aimet_torch.v1.tensor_quantizer import TensorQuantizer
 from aimet_torch.meta.connectedgraph import ConnectedGraph
 from aimet_torch.onnx_utils import map_torch_types_to_onnx, pytorch_functional_name_to_onnx_dict
 from aimet_torch.translation_mapping import aimet_op_to_backend_op_name_map

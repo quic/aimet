@@ -48,7 +48,7 @@ from aimet_common.defs import QuantScheme, QuantizationDataType, MAP_ROUND_MODE_
 from aimet_torch.examples.test_models import MultiInput
 
 from aimet_torch.v1.quantsim import QuantizationSimModel
-from aimet_torch.tensor_quantizer import StaticGridPerTensorQuantizer, StaticGridPerChannelQuantizer
+from aimet_torch.v1.tensor_quantizer import StaticGridPerTensorQuantizer, StaticGridPerChannelQuantizer
 from aimet_torch.weight_padding_utils import recompute_scale, recompute_encodings, weight_pad, WeightPaddingParams
 
 from models.test_models import TinyModel
