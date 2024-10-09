@@ -48,7 +48,7 @@ import onnx
 import onnxruntime as ort
 import pytest
 
-from aimet_onnx import quantsim
+from aimet_common import quantsim
 from aimet_common import libquant_info
 from aimet_common.defs import QuantScheme, QuantizationDataType, EncodingType
 from aimet_common.quantsim_config.utils import get_path_for_per_channel_config

@@ -48,12 +48,12 @@ import onnxsim
 from tqdm import tqdm
 
 # Import AIMET specific modules
+from aimet_common import quantsim
 from aimet_common.utils import AimetLogger
 from aimet_common.defs import QuantScheme, QuantizationDataType
 
 from aimet_onnx.adaround.adaround_loss import AdaroundHyperParameters
 from aimet_onnx.adaround.adaround_tensor_quantizer import AdaroundTensorQuantizer
-from aimet_onnx import quantsim
 from aimet_onnx.quantsim import QuantizationSimModel
 from aimet_onnx.qc_quantize_op import OpMode
 from aimet_onnx.meta.utils import get_module_act_func_pair, get_ordered_ops

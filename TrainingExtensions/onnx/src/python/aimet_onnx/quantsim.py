@@ -53,10 +53,10 @@ from onnxruntime.quantization.onnx_quantizer import ONNXModel
 from packaging import version
 
 # pylint: disable=wrong-import-order
-from aimet_common import libpymo
+from aimet_common import libpymo, quantsim
 from aimet_common import libquant_info
 from aimet_common.defs import QuantScheme, QuantizationDataType
-from aimet_common.quantsim import encoding_version, extract_global_quantizer_args, VALID_ENCODING_VERSIONS
+from aimet_common.quantsim import extract_global_quantizer_args, VALID_ENCODING_VERSIONS
 from aimet_common.utils import save_json_yaml, AimetLogger
 from aimet_onnx import utils
 from aimet_onnx.meta.operations import Op
@@ -743,7 +743,7 @@ class QuantizationSimModel:
         :param path: dir to save encoding files
         :param filename_prefix: filename to save encoding files
         """
-        self._export_encodings(os.path.join(path, filename_prefix) + '.encodings', encoding_version)
+        self._export_encodings(os.path.join(path, filename_prefix) + '.encodings', quantsim.encoding_version)
         self.remove_quantization_nodes()
         if self.model.model.ByteSize() >= onnx.checker.MAXIMUM_PROTOBUF:
             # Note: Saving as external data mutates the saved model, removing all initializer data
