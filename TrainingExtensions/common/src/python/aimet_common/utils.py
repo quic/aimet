@@ -39,6 +39,7 @@
 
 import sys
 from contextlib import contextmanager
+import functools
 import json
 import logging
 import logging.config
@@ -49,6 +50,7 @@ import signal
 import subprocess
 import threading
 import time
+import warnings
 from enum import Enum
 from typing import Callable, Dict, List, Optional, TextIO, Union, Any
 import multiprocessing
@@ -68,6 +70,24 @@ except ImportError:
     Product = 'AIMET'
     Version_Info = ''
     Postfix = ''
+
+
+def _red(msg: str):
+    return f'\x1b[31;21m{msg}\x1b[0m'
+
+
+def deprecated(msg: str):
+    """
+    Wrap a function or class such that a deprecation warning is printed out when invoked
+    """
+    def decorator(_callable):
+        @functools.wraps(_callable)
+        def fn_wrapper(*args, **kwargs):
+            warnings.warn(_red(f'{_callable.__qualname__} will be deprecated soon in the later versions. {msg}'),
+                          DeprecationWarning, stacklevel=2)
+            return _callable(*args, **kwargs)
+        return fn_wrapper
+    return decorator
 
 
 class ModelApi(Enum):

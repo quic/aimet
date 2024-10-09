@@ -474,23 +474,26 @@ class QuantAnalyzer:
             # Get input activations' encodings if starting op
             for index, quantizer in enumerate(input_quantizers):
                 name = f"{op_name}_input_{index}"
-                min_max_range_for_activations_dict[name] = (quantizer.encodings[0].min, quantizer.encodings[0].max)
+                encodings = quantizer.get_encodings()
+                min_max_range_for_activations_dict[name] = (encodings[0].min, encodings[0].max)
 
             # Get output activations' encodings
             for index, quantizer in enumerate(output_quantizers):
                 name = f"{op_name}_output_{index}"
-                min_max_range_for_activations_dict[name] = (quantizer.encodings[0].min, quantizer.encodings[0].max)
+                encodings = quantizer.get_encodings()
+                min_max_range_for_activations_dict[name] = (encodings[0].min, encodings[0].max)
 
             # Get parameters' encodings
             for param_name, quantizer in param_quantizers.items():
                 name = re.sub(r'\W+', '_', f"{op_name}_{param_name}")
-                if len(quantizer.encodings) > 1: # per-channel
+                encodings = quantizer.get_encodings()
+                if len(encodings) > 1: # per-channel
                     per_channel_encodings = {}
-                    for index, encoding in enumerate(quantizer.encodings):
+                    for index, encoding in enumerate(encodings):
                         per_channel_encodings[f"{name}_{index}"] = (encoding.min, encoding.max)
                     min_max_range_for_weights_dict[name] = per_channel_encodings
                 else: # per-tensor
-                    min_max_range_for_weights_dict[name] = (quantizer.encodings[0].min, quantizer.encodings[0].max)
+                    min_max_range_for_weights_dict[name] = (encodings[0].min, encodings[0].max)
 
         create_and_export_min_max_ranges_plot(min_max_range_for_weights_dict, min_max_ranges_dir, title="weights")
         create_and_export_min_max_ranges_plot(min_max_range_for_activations_dict, min_max_ranges_dir, title="activations")
@@ -564,7 +567,7 @@ class QuantAnalyzer:
         os.makedirs(results_dir, exist_ok=True)
 
         histograms = quantizer.get_stats_histogram()
-        encodings = quantizer.encodings
+        encodings = quantizer.get_encodings()
 
         if not isinstance(encodings, List):
             encodings = [encodings]

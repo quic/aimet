@@ -395,7 +395,6 @@ class QuantizationSimModel:
             self.qc_quantize_op_dict[name] = QcQuantizeOp(quant_info=quant_info,
                                                           quant_scheme=self._quant_scheme,
                                                           rounding_mode=self._rounding_mode,
-                                                          encodings=None,
                                                           op_mode=OpMode.oneShotQuantizeDequantize,
                                                           bitwidth=self._default_param_bw,
                                                           use_symmetric_encodings=self._use_symmetric_encodings,
@@ -462,7 +461,6 @@ class QuantizationSimModel:
             self.qc_quantize_op_dict[name] = QcQuantizeOp(quant_info=quant_info,
                                                           quant_scheme=self._quant_scheme,
                                                           rounding_mode=self._rounding_mode,
-                                                          encodings=None,
                                                           op_mode=OpMode.updateStats,
                                                           bitwidth=self._default_activation_bw,
                                                           use_symmetric_encodings=self._use_symmetric_encodings

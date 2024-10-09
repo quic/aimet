@@ -58,7 +58,7 @@ from torchvision import datasets, transforms
 
 from aimet_common.defs import QuantScheme, QuantizationDataType, MAP_QUANT_SCHEME_TO_PYMO
 from aimet_common.utils import AimetLogger, Handle, log_with_error_and_assert_if_false
-from aimet_common.utils import profile as _profile
+from aimet_common.utils import profile as _profile, deprecated, _red # pylint:disable = unused-import
 import aimet_common.libpymo as libpymo
 import aimet_torch.v1.nn.modules.custom as aimet_modules
 from aimet_torch.tensor_quantizer import TensorQuantizer, StaticGridPerChannelQuantizer, StaticGridPerTensorQuantizer
@@ -1301,10 +1301,6 @@ def compute_partial_encoding(quantizer: TensorQuantizer, encoding_dict: Dict) ->
     return encoding_dict
 
 
-def _red(msg: str):
-    return f'\x1b[31;21m{msg}\x1b[0m'
-
-
 def _warn_replaced_in_v2(name: str, v2_new_api: str, v1_legacy_api: str = None):
     msg = f"\"{name}\" will be replaced with \"{v2_new_api}\" soon in the later versions."
 
@@ -1313,20 +1309,6 @@ def _warn_replaced_in_v2(name: str, v2_new_api: str, v1_legacy_api: str = None):
                f" please import \"{v1_legacy_api}\" instead."
 
     warnings.warn(_red(msg), DeprecationWarning, stacklevel=3)
-
-
-def deprecated(msg: str):
-    """
-    Wrap a function or class such that a deprecation warning is printed out when invoked
-    """
-    def decorator(_callable):
-        @functools.wraps(_callable)
-        def fn_wrapper(*args, **kwargs):
-            warnings.warn(_red(f'{_callable.__qualname__} will be deprecated soon in the later versions. {msg}'),
-                          DeprecationWarning, stacklevel=2)
-            return _callable(*args, **kwargs)
-        return fn_wrapper
-    return decorator
 
 
 def profile(label: str, file: Union[str, os.PathLike, TextIO] = None, new_file: bool = False, logger: Optional[logging.Logger] = None): # pylint: disable=redefined-outer-name
