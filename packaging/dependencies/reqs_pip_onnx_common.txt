@@ -1,0 +1,14 @@
+cvxpy
+cylp
+matplotlib>=3
+networkx
+numpy<=1.24.4,>=1.16.6
+onnx==1.16.1
+onnxruntime==1.18.1
+onnxruntime-extensions
+onnxscript
+onnxsim
+pandas==1.4.3
+protobuf==3.20.2
+psutil
+tensorboardX==2.4
