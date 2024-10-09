@@ -440,6 +440,8 @@ class TestQuantSim:
                 in_tensor = {'input': np.random.rand(10, 10, 4, 4).astype(np.float32)}
                 session.run(None, in_tensor)
 
+            sim.compute_encodings(dummy_callback, None)
+
             for param_name in sim.param_names:
                 if param_name in conv_transpose_weight_names:
                     for weight in sim.model.graph().initializer:
@@ -452,8 +454,6 @@ class TestQuantSim:
                     assert qc_op.quant_info.enabled
                     assert qc_op.quant_info.channelAxis == 1
                     assert len(qc_op.encodings) == weight.dims[1]
-
-            sim.compute_encodings(dummy_callback, None)
 
     def test_load_encodings_ptq(self):
         model = single_residual_model().model
@@ -1068,6 +1068,8 @@ class TestQuantSim:
         sim.compute_encodings(lambda session, _: session.run(None, dummy_input), None)
 
         for name, quantizer in sim.qc_quantize_op_dict.items():
+            if not quantizer.enabled:
+                continue
             if name in bq_weights:
                 assert quantizer.quant_info.usePerChannelMode
                 assert quantizer.quant_info.blockSize == block_size

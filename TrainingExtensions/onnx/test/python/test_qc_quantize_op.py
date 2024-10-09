@@ -187,7 +187,6 @@ class TestQcQuantizeOp:
         qc_op = QcQuantizeOp(quant_info=quant_info,
                              quant_scheme=QuantScheme.post_training_tf,
                              rounding_mode='nearest',
-                             encodings=None,
                              op_mode=OpMode.oneShotQuantizeDequantize,
                              bitwidth=8,
                              use_symmetric_encodings=False,
@@ -199,9 +198,8 @@ class TestQcQuantizeOp:
         encodings.max = 1
         encodings.min = -5.0
 
-        qc_op.encodings = [encodings]
+        qc_op.load_encodings([encodings])
 
-        qc_op.op_mode = OpMode.quantizeDequantize
         output = session.run(None, {'input': input_arr})[0]
 
         assert np.max(output) <= 1.1
@@ -220,7 +218,6 @@ class TestQcQuantizeOp:
         qc_op = QcQuantizeOp(quant_info=quant_info,
                              quant_scheme=QuantScheme.post_training_tf,
                              rounding_mode='nearest',
-                             encodings=None,
                              op_mode=OpMode.oneShotQuantizeDequantize,
                              bitwidth=8,
                              use_symmetric_encodings=False,
@@ -244,7 +241,6 @@ class TestQcQuantizeOp:
         qc_op = QcQuantizeOp(quant_info=quant_info,
                              quant_scheme=QuantScheme.post_training_tf,
                              rounding_mode='nearest',
-                             encodings=None,
                              op_mode=OpMode.updateStats,
                              bitwidth=8,
                              use_symmetric_encodings=False,
@@ -273,7 +269,6 @@ class TestQcQuantizeOp:
         qc_op = QcQuantizeOp(quant_info=quant_info,
                              quant_scheme=QuantScheme.post_training_tf,
                              rounding_mode='nearest',
-                             encodings=None,
                              op_mode=OpMode.oneShotQuantizeDequantize,
                              bitwidth=8,
                              use_symmetric_encodings=False,
@@ -304,7 +299,6 @@ class TestQcQuantizeOp:
         qc_op = QcQuantizeOp(quant_info=quant_info,
                              quant_scheme=QuantScheme.post_training_tf,
                              rounding_mode='nearest',
-                             encodings=None,
                              op_mode=OpMode.oneShotQuantizeDequantize,
                              bitwidth=8,
                              use_symmetric_encodings=False,
@@ -317,8 +311,7 @@ class TestQcQuantizeOp:
         encodings.max = 2.5
         encodings.min = -7
         encodings.offset = -188
-        qc_op.encodings = [encodings]
-        qc_op.op_mode = OpMode.quantizeDequantize
+        qc_op.load_encodings([encodings])
 
         output_qdq = session.run(None, {'input': input_arr})
 
@@ -346,8 +339,7 @@ class TestQcQuantizeOp:
         encodings.max = 7
         encodings.min = -7
         encodings.offset = -128
-        qc_op.encodings = [encodings]
-        qc_op.op_mode = OpMode.quantizeDequantize
+        qc_op.load_encodings([encodings])
 
         output_qdq = session.run(None, {'input': input_arr})
 
@@ -377,8 +369,7 @@ class TestQcQuantizeOp:
         encodings.max = 5.3
         encodings.min = 0.0
         encodings.offset = 0
-        qc_op.encodings = [encodings]
-        qc_op.op_mode = OpMode.quantizeDequantize
+        qc_op.load_encodings([encodings])
 
         output_qdq = session.run(None, {'input': input_arr})
 
@@ -544,7 +535,6 @@ class TestQcQuantizeOp:
         qc_op = QcQuantizeOp(quant_info=quant_info,
                              quant_scheme=quant_scheme,
                              rounding_mode='nearest',
-                             encodings=None,
                              op_mode=OpMode.updateStats,
                              bitwidth=8,
                              use_symmetric_encodings=True,
@@ -822,7 +812,7 @@ class TestBlockwiseQuantizeOp:
         encoding.bw = bitwidth
         encoding.offset = offset
         encoding.delta = delta
-        qc_quantize_op.encodings = [encoding]
+        qc_quantize_op.load_encodings([encoding])
         exported_encodings = qc_quantize_op.export_encodings("0.6.1")
         assert len(exported_encodings) == 1
         assert exported_encodings[0]["scale"] == delta
@@ -850,7 +840,7 @@ class TestBlockwiseQuantizeOp:
             encoding.bw = bitwidth
             encoding.offset = offset
             encoding.delta = delta
-        qc_quantize_op.encodings = encodings
+        qc_quantize_op.load_encodings(encodings)
         exported_encodings = qc_quantize_op.export_encodings("0.6.1")
         assert len(exported_encodings) == tensor_shape[channel_axis]
 
@@ -862,3 +852,10 @@ class TestBlockwiseQuantizeOp:
         assert len(encodings) == 1
         assert encodings[0]["dtype"] == "float"
         assert encodings[0]["bitwidth"] == 16
+
+    def test_load_float_encodings(self):
+        quant_info = libquant_info.QcQuantizeInfo()
+        qc_quantize_op = QcQuantizeOp(quant_info, bitwidth=16, op_mode=OpMode.quantizeDequantize)
+        qc_quantize_op.data_type = QuantizationDataType.float
+        with pytest.raises(RuntimeError):
+            qc_quantize_op.load_encodings([libpymo.TfEncoding()])
