@@ -44,7 +44,7 @@ import torch
 from aimet_torch.tensor_factory_utils import constant_like
 
 if TYPE_CHECKING:
-    from aimet_torch.tensor_quantizer import LearnedGridTensorQuantizer
+    from aimet_torch.tensor_quantizer import LearnedGridTensorQuantizer # pylint:disable = cyclic-import
 
 
 @dataclass

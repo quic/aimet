@@ -61,7 +61,7 @@ from aimet_common.utils import AimetLogger, Handle, log_with_error_and_assert_if
 from aimet_common.utils import profile as _profile, deprecated, _red # pylint:disable = unused-import
 import aimet_common.libpymo as libpymo
 import aimet_torch.v1.nn.modules.custom as aimet_modules
-from aimet_torch.tensor_quantizer import TensorQuantizer, StaticGridPerChannelQuantizer, StaticGridPerTensorQuantizer
+from aimet_torch.tensor_quantizer import TensorQuantizer, StaticGridPerChannelQuantizer, StaticGridPerTensorQuantizer # pylint:disable = cyclic-import
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Utils)
 
@@ -953,6 +953,7 @@ def get_all_quantizers(model: torch.nn.Module):
     :param model: Root module
     :returns: List of parameter, input, and output quantizers
     """
+    # pylint:disable = cyclic-import
     from aimet_torch.v2.nn.base import BaseQuantizationMixin# pylint: disable=import-outside-toplevel
     from aimet_torch.qc_quantize_op import QcQuantizeWrapper# pylint: disable=import-outside-toplevel
     from aimet_torch.qc_quantize_recurrent import QcQuantizeRecurrent# pylint: disable=import-outside-toplevel
