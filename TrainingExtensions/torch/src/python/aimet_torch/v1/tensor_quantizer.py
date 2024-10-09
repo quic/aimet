@@ -49,10 +49,10 @@ import aimet_common.libpymo as libpymo
 from aimet_common.defs import QuantScheme, QuantizationDataType, MAP_QUANT_SCHEME_TO_PYMO
 from aimet_common.quantsim import is_non_strict_symmetric
 from aimet_common.utils import AimetLogger, log_with_error_and_assert_if_false
-import aimet_torch.quantsim_straight_through_grad as grad_fn
-from aimet_torch.quantsim_straight_through_grad import IntermediateResult
+import aimet_torch.v1.quantsim_straight_through_grad as grad_fn
+from aimet_torch.v1.quantsim_straight_through_grad import IntermediateResult
 from aimet_torch.fp_quantization import fp8_quantizer, INIT_MAP
-from aimet_torch.tensor_factory_utils import constant_like
+from aimet_torch.v1.tensor_factory_utils import constant_like
 
 _logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
 

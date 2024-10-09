@@ -51,10 +51,10 @@ from aimet_common.utils import AimetLogger, Handle
 from aimet_common.defs import QuantScheme, QuantizationDataType, MAP_ROUND_MODE_TO_PYMO
 from aimet_torch.custom import custom_tensor_utils
 from aimet_torch import utils
-from aimet_torch.tensor_quantizer import StaticGridPerTensorQuantizer, StaticGridPerChannelQuantizer, TensorQuantizer, \
+from aimet_torch.v1.tensor_quantizer import StaticGridPerTensorQuantizer, StaticGridPerChannelQuantizer, TensorQuantizer, \
     LearnedGridTensorQuantizer, set_encoding_min_max_gating_threshold, StaticGridTensorQuantizer
-from aimet_torch.torch_quantizer import TorchQuantizer
-import aimet_torch.quantsim_straight_through_grad as ste
+from aimet_torch.v1.torch_quantizer import TorchQuantizer
+import aimet_torch.v1.quantsim_straight_through_grad as ste
 from aimet_torch.utils import compute_partial_encoding, validate_is_symmetric_flag
 
 _logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)

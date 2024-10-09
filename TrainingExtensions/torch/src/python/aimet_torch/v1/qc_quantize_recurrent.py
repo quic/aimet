@@ -46,8 +46,8 @@ import aimet_common.libpymo as libpymo
 from aimet_common.defs import QuantScheme, QuantizationDataType, MAP_ROUND_MODE_TO_PYMO
 from aimet_common.utils import AimetLogger
 from aimet_torch.defs import OpToIOTensors
-from aimet_torch.qc_quantize_op import QcQuantizeOpMode, tensor_quantizer_factory
-from aimet_torch.tensor_quantizer import StaticGridPerTensorQuantizer, initialize_learned_grid_quantizer_attributes, \
+from aimet_torch.v1.qc_quantize_op import QcQuantizeOpMode, tensor_quantizer_factory
+from aimet_torch.v1.tensor_quantizer import StaticGridPerTensorQuantizer, initialize_learned_grid_quantizer_attributes, \
     LearnedGridTensorQuantizer, set_encoding_min_max_gating_threshold, ParameterQuantizer
 from aimet_torch.utils import get_device
 

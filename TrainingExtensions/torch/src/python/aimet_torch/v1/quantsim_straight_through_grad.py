@@ -41,10 +41,10 @@ from typing import TYPE_CHECKING, Tuple
 
 import torch
 
-from aimet_torch.tensor_factory_utils import constant_like
+from aimet_torch.v1.tensor_factory_utils import constant_like
 
 if TYPE_CHECKING:
-    from aimet_torch.tensor_quantizer import LearnedGridTensorQuantizer # pylint:disable = cyclic-import
+    from aimet_torch.v1.tensor_quantizer import LearnedGridTensorQuantizer # pylint:disable = cyclic-import
 
 
 @dataclass

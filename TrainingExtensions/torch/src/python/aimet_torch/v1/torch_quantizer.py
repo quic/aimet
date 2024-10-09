@@ -45,7 +45,7 @@ from packaging import version  # pylint: disable=wrong-import-order
 import aimet_common.libpymo as libpymo
 from aimet_common.utils import AimetLogger
 from aimet_common.defs import QuantizationDataType
-from aimet_torch.tensor_quantizer import StaticGridTensorQuantizer, LearnedGridTensorQuantizer
+from aimet_torch.v1.tensor_quantizer import StaticGridTensorQuantizer, LearnedGridTensorQuantizer
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Utils)
 
