@@ -33,7 +33,7 @@
 #
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
-
+import contextlib
 import json
 import os
 import tempfile
@@ -50,6 +50,7 @@ from tensorflow import keras
 
 import aimet_common.utils
 from aimet_common.defs import QuantScheme, RANGE_LEARNING_SCHEMES
+from aimet_common import quantsim
 from aimet_tensorflow.examples.test_models import keras_model
 from aimet_tensorflow.keras.utils.quantizer_utils import SaveModelWithoutQuantsimWrappersCallback
 from aimet_tensorflow.keras.cross_layer_equalization import equalize_model
@@ -1632,3 +1633,28 @@ def test_quantizable_lstm_export_encodings():
                     assert param_name in encodings['param_encodings']
                     assert encodings['param_encodings'][param_name] == encoding_dict
 
+def test_quantsim_export_to_1_0_0():
+    @contextlib.contextmanager
+    def _swap_encoding_version():
+        old_version = quantsim.encoding_version
+        quantsim.encoding_version = '1.0.0'
+
+        yield
+
+        quantsim.encoding_version = old_version
+
+    model = dense_functional()
+    rand_inp = np.random.randn(100, 5)
+
+
+    qsim = QuantizationSimModel(model, quant_scheme='tf')
+    qsim.compute_encodings(lambda m, _: m(rand_inp), None)
+
+    with tempfile.TemporaryDirectory() as temp_dir, _swap_encoding_version():
+        assert quantsim.encoding_version == '1.0.0'
+        qsim.export(temp_dir, 'test_export')
+        assert quantsim.encoding_version == '1.0.0'
+
+        with open(os.path.join(temp_dir, 'test_export.encodings'), 'r') as encoding_file:
+            encodings = json.load(encoding_file)
+        assert encodings['version'] == '0.6.1'
