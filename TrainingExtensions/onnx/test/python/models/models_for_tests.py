@@ -1634,31 +1634,35 @@ class MultipleOutputModel(SingleResidual):
         return x, y
 
 
-def _convert_to_onnx_no_fold(model: torch.nn.Module, dummy_input, filename='./temp_model.onnx'):
-    torch.onnx.export(model.eval(),
-                      dummy_input,
-                      filename,
-                      training=torch.onnx.TrainingMode.PRESERVE,
-                      export_params=True,
-                      opset_version=12,
-                      do_constant_folding=False,
-                      input_names=['input'],
-                      output_names=['output'])
-    model = ONNXModel(load_model(filename))
+def _convert_to_onnx_no_fold(model: torch.nn.Module, dummy_input, filename='temp_model.onnx'):
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        save_path = os.path.join(tmp_dir, filename)
+        torch.onnx.export(model.eval(),
+                          dummy_input,
+                          save_path,
+                          training=torch.onnx.TrainingMode.PRESERVE,
+                          export_params=True,
+                          opset_version=12,
+                          do_constant_folding=False,
+                          input_names=['input'],
+                          output_names=['output'])
+        model = ONNXModel(load_model(save_path))
     return model
 
 
-def _convert_to_onnx(model: torch.nn.Module, dummy_input, filename='./temp_model.onnx'):
-    torch.onnx.export(model.eval(),
-                      dummy_input,
-                      filename,
-                      training=torch.onnx.TrainingMode.EVAL,
-                      export_params=True,
-                      opset_version=12,
-                      do_constant_folding=True,
-                      input_names=['input'],
-                      output_names=['output'])
-    model = ONNXModel(load_model(filename))
+def _convert_to_onnx(model: torch.nn.Module, dummy_input, filename='temp_model.onnx'):
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        save_path = os.path.join(tmp_dir, filename)
+        torch.onnx.export(model.eval(),
+                          dummy_input,
+                          save_path,
+                          training=torch.onnx.TrainingMode.EVAL,
+                          export_params=True,
+                          opset_version=12,
+                          do_constant_folding=True,
+                          input_names=['input'],
+                          output_names=['output'])
+        model = ONNXModel(load_model(save_path))
     return model
 
 
