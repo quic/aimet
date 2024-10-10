@@ -37,6 +37,7 @@
 """ Quantsim for Keras """
 from __future__ import annotations
 
+import contextlib
 from dataclasses import dataclass
 import json
 import os
@@ -47,7 +48,8 @@ from aimet_common import libpymo
 
 from aimet_common.defs import QuantScheme, QuantizationDataType
 from aimet_common.utils import AimetLogger, save_json_yaml
-from aimet_common.quantsim import encoding_version, extract_global_quantizer_args
+from aimet_common import quantsim
+from aimet_common.quantsim import extract_global_quantizer_args
 from aimet_tensorflow.keras.connectedgraph import ConnectedGraph
 from aimet_tensorflow.keras.graphsearchtuils import GraphSearchUtils
 from aimet_tensorflow.keras.quant_sim.qc_quantize_wrapper import QcQuantizeWrapper, QuantizerSettings
@@ -424,7 +426,7 @@ class QuantizationSimModel(tf.keras.Model):
                     encoding_dict = self._get_encoding_dict_for_quantizer(output_quantizer)
                     activation_encodings[tensor_name] = encoding_dict
         return {
-            'version': encoding_version,
+            'version': quantsim.encoding_version,
             'activation_encodings': activation_encodings,
             'param_encodings': param_encodings,
             'quantizer_args': self.quant_args if hasattr(self, "quant_args") else {}
@@ -477,6 +479,20 @@ class QuantizationSimModel(tf.keras.Model):
                 if param_quantizer.is_enabled():
                     param_quantizer.quant_mode = op_mode
 
+    @staticmethod
+    @contextlib.contextmanager
+    def _set_encoding_version_to_0_6_1():
+        assert quantsim.encoding_version in {'0.6.1', '1.0.0'}
+        if quantsim.encoding_version == '1.0.0':
+            _logger.info('Exporting to encoding version 1.0.0 is not yet supported. Exporting using version 0.6.1 '
+                         'instead.')
+        old_encoding_version = quantsim.encoding_version
+        quantsim.encoding_version = '0.6.1'
+
+        yield
+
+        quantsim.encoding_version = old_encoding_version
+
     def export(self, path, filename_prefix, custom_objects=None, convert_to_pb=True):
         """
         This method exports out the quant-sim model so it is ready to be run on-target.
@@ -488,29 +504,30 @@ class QuantizationSimModel(tf.keras.Model):
         :param filename_prefix: Prefix to use for filenames of the model pth and encodings files
         :param custom_objects: If there are custom objects to load, Keras needs a dict of them to map them
         """
-        model_path = os.path.join(path, filename_prefix)
+        with self._set_encoding_version_to_0_6_1():
+            model_path = os.path.join(path, filename_prefix)
 
-        #TF Version 2.4 has bug i.e. save() in tf format don't work for unrolled LSTM.
-        for layer in self._model_without_wrappers.layers:
-            if isinstance(layer, tf.keras.layers.LSTM):
-                break
-        else:
-            self._model_without_wrappers.save(model_path)
+            #TF Version 2.4 has bug i.e. save() in tf format don't work for unrolled LSTM.
+            for layer in self._model_without_wrappers.layers:
+                if isinstance(layer, tf.keras.layers.LSTM):
+                    break
+            else:
+                self._model_without_wrappers.save(model_path)
 
-        self._model_without_wrappers.save(model_path + '.h5', save_format='h5')
+            self._model_without_wrappers.save(model_path + '.h5', save_format='h5')
 
-        # Conversion of saved h5 model to pb model for consumption by SNPE/QNN
-        try:
-            if convert_to_pb:
-                convert_h5_model_to_pb_model(f'{model_path}.h5', custom_objects=custom_objects)
-        except ValueError:
-            _logger.error("Could not convert h5 to frozen pb. "
-                          "Please call export() again with custom_objects defined.")
-            raise
-        finally:
-            encodings_dict = self.get_encodings_dict()
-            encoding_file_path = os.path.join(path, filename_prefix + '.encodings')
-            save_json_yaml(encoding_file_path, encodings_dict)
+            # Conversion of saved h5 model to pb model for consumption by SNPE/QNN
+            try:
+                if convert_to_pb:
+                    convert_h5_model_to_pb_model(f'{model_path}.h5', custom_objects=custom_objects)
+            except ValueError:
+                _logger.error("Could not convert h5 to frozen pb. "
+                              "Please call export() again with custom_objects defined.")
+                raise
+            finally:
+                encodings_dict = self.get_encodings_dict()
+                encoding_file_path = os.path.join(path, filename_prefix + '.encodings')
+                save_json_yaml(encoding_file_path, encodings_dict)
 
     def _compute_and_set_parameter_encodings(self, ops_with_invalid_encodings: List):
         # pylint: disable=too-many-nested-blocks

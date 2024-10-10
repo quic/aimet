@@ -46,6 +46,7 @@ import pickle
 from typing import Tuple, List, Union, Dict, Callable, Optional, Any, runtime_checkable, Protocol, Mapping
 from collections import OrderedDict, defaultdict
 import json
+import warnings
 import torch
 import onnx
 from packaging import version  # pylint: disable=wrong-import-order
@@ -59,6 +60,7 @@ from aimet_common.utils import AimetLogger, save_json_yaml, log_with_error_and_a
 from aimet_common.defs import QuantScheme, QuantizationDataType, SupportedKernelsAction, QuantDtypeBwInfo
 from aimet_common.quantsim import validate_quantsim_inputs, extract_global_quantizer_args, VALID_ENCODING_VERSIONS
 from aimet_common.quant_utils import get_conv_accum_bounds
+from aimet_common.utils import deprecated, _red
 
 from aimet_torch.v1.nn.modules.custom import MatMul
 from aimet_torch.quantsim_config.quantsim_config import QuantSimConfigurator
@@ -67,7 +69,6 @@ from aimet_torch.qc_quantize_op import QcQuantizeStandAloneBase, QcQuantizeWrapp
 from aimet_torch.tensor_quantizer import initialize_learned_grid_quantizer_attributes, TensorQuantizer
 from aimet_torch.qc_quantize_op import get_encoding_by_quantizer as _get_encoding_by_quantizer
 from aimet_torch import torchscript_utils, utils, onnx_utils
-from aimet_torch.utils import deprecated
 from aimet_torch.onnx_utils import (
     OnnxSaver,
     OnnxExportApiArgs,
@@ -520,7 +521,15 @@ class QuantizationSimModel:
         :param filename_prefix_encodings: File name prefix to be used when saving encodings.
                                           If None, then user defaults to filename_prefix value
         """
-
+        if quantsim.encoding_version == '0.6.1':
+            msg = _red("Encoding version 0.6.1 will be deprecated in a future release, with version 1.0.0 becoming "
+                       "the default. If your code depends on parsing the exported encodings file, ensure that it is "
+                       "updated to be able to parse 1.0.0 format.\n"
+                       "To swap the encoding version to 1.0.0, run the following lines prior to calling quantsim "
+                       "export:\n\n"
+                       "from aimet_common import quantsim\n"
+                       "quantsim.encoding_version = '1.0.0'")
+            warnings.warn(msg, DeprecationWarning, stacklevel=2)
         warning_str = 'Exporting encodings to yaml will be deprecated in a future release. Ensure that your ' \
                       'code can work with the exported files ending in ".encodings" which are saved using json ' \
                       'format. For the time being, if yaml export is needed, set aimet_common.utils.SAVE_TO_YAML to ' \

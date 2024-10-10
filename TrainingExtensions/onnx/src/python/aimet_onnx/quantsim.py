@@ -43,6 +43,7 @@ from pathlib import Path
 import os
 from typing import Dict, List, Union, Tuple, Optional
 import json
+import warnings
 import numpy as np
 import onnx
 
@@ -58,7 +59,7 @@ from aimet_common import libpymo, quantsim
 from aimet_common import libquant_info
 from aimet_common.defs import QuantScheme, QuantizationDataType
 from aimet_common.quantsim import extract_global_quantizer_args, VALID_ENCODING_VERSIONS
-from aimet_common.utils import save_json_yaml, AimetLogger
+from aimet_common.utils import save_json_yaml, AimetLogger, _red
 from aimet_common.connected_graph.product import Product
 from aimet_onnx import utils
 from aimet_onnx.meta.operations import Op
@@ -770,6 +771,15 @@ class QuantizationSimModel:
         :param path: dir to save encoding files
         :param filename_prefix: filename to save encoding files
         """
+        if quantsim.encoding_version == '0.6.1':
+            msg = _red("Encoding version 0.6.1 will be deprecated in a future release, with version 1.0.0 becoming "
+                       "the default. If your code depends on parsing the exported encodings file, ensure that it is "
+                       "updated to be able to parse 1.0.0 format.\n"
+                       "To swap the encoding version to 1.0.0, run the following lines prior to calling quantsim "
+                       "export:\n\n"
+                       "from aimet_common import quantsim\n"
+                       "quantsim.encoding_version = '1.0.0'")
+            warnings.warn(msg, DeprecationWarning, stacklevel=2)
         self._export_encodings(os.path.join(path, filename_prefix) + '.encodings', quantsim.encoding_version)
         self.remove_quantization_nodes()
         if self.model.model.ByteSize() >= onnx.checker.MAXIMUM_PROTOBUF:
