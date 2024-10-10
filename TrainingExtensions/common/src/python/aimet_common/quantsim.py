@@ -54,6 +54,7 @@ import aimet_common.libpymo as libpymo
 # The patching version shall be updated to indicate minor updates to quantization simulation e.g. bug fix etc.
 encoding_version = '0.6.1'
 ALLOW_EXPERIMENTAL = False
+VALID_ENCODING_VERSIONS = {'0.6.1', '1.0.0'}
 
 
 def gate_min_max(min_val: float, max_val: float) -> Tuple[float, float]:

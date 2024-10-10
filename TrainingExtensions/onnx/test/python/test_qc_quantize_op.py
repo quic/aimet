@@ -42,7 +42,7 @@ from onnx import helper
 import os
 import pytest
 from aimet_common import libpymo
-from aimet_common.defs import QuantScheme, MAP_QUANT_SCHEME_TO_PYMO, MAP_ROUND_MODE_TO_PYMO, QuantizationDataType
+from aimet_common.defs import QuantScheme, MAP_QUANT_SCHEME_TO_PYMO, MAP_ROUND_MODE_TO_PYMO, QuantizationDataType, EncodingType
 from aimet_onnx.qc_quantize_op import QcQuantizeOp, OpMode, TensorQuantizerParams
 from aimet_common import libquant_info
 from aimet_common.quantsim import calculate_delta_offset
@@ -812,7 +812,7 @@ class TestBlockwiseQuantizeOp:
         encoding.bw = bitwidth
         encoding.offset = offset
         encoding.delta = delta
-        qc_quantize_op.load_encodings([encoding])
+        qc_quantize_op.update_quantizer_and_load_encodings([encoding], symmetric, False, False, QuantizationDataType.int)
         exported_encodings = qc_quantize_op.export_encodings("0.6.1")
         assert len(exported_encodings) == 1
         assert exported_encodings[0]["scale"] == delta
@@ -821,11 +821,26 @@ class TestBlockwiseQuantizeOp:
         assert exported_encodings[0]["dtype"] == "int"
         assert exported_encodings[0]["is_symmetric"] == str(symmetric)
 
+        exported_encodings = qc_quantize_op.export_encodings("1.0.0")
+        assert isinstance(exported_encodings, dict)
+        assert exported_encodings.keys() == {"enc_type", "dtype", "bw", "is_sym", "scale", "offset"}
+        assert exported_encodings["dtype"] == "INT"
+        assert exported_encodings["enc_type"] == EncodingType.PER_TENSOR.name
+        assert exported_encodings["bw"] == bitwidth
+        assert exported_encodings["is_sym"] == symmetric
+        assert isinstance(exported_encodings["scale"], list)
+        assert isinstance(exported_encodings["offset"], list)
+        assert len(exported_encodings["scale"]) == 1
+        assert len(exported_encodings["offset"]) == 1
+        assert exported_encodings["scale"][0] == delta
+        assert exported_encodings["offset"][0] == offset
+
     @pytest.mark.parametrize("symmetric, bitwidth, delta, offset", [(True, 8, 0.1, -128),])
     def test_export_per_channel_int_encodings(self, symmetric, bitwidth, delta, offset):
         channel_axis = 0
+        block_axis = 1
         tensor_shape = [5, 8]
-        params = TensorQuantizerParams(tensor_shape, channel_axis)
+        params = TensorQuantizerParams(tensor_shape, channel_axis, block_axis)
 
         quant_info = libquant_info.QcQuantizeInfo()
         quant_info.usePerChannelMode = False
@@ -844,6 +859,22 @@ class TestBlockwiseQuantizeOp:
         exported_encodings = qc_quantize_op.export_encodings("0.6.1")
         assert len(exported_encodings) == tensor_shape[channel_axis]
 
+        exported_encodings = qc_quantize_op.export_encodings("1.0.0")
+        assert exported_encodings.keys() == {"enc_type", "dtype", "bw", "is_sym", "scale", "offset"}
+        assert exported_encodings["enc_type"] == EncodingType.PER_CHANNEL.name
+        assert len(exported_encodings["scale"]) == tensor_shape[channel_axis]
+        assert len(exported_encodings["offset"]) == tensor_shape[channel_axis]
+
+        block_size = 4
+        qc_quantize_op._enable_blockwise_quantization(block_size)
+        encodings = [libpymo.TfEncoding() for _ in range(tensor_shape[channel_axis] * 2)]
+        qc_quantize_op.load_encodings(encodings)
+        exported_encodings = qc_quantize_op.export_encodings("1.0.0")
+        assert exported_encodings.keys() == {"enc_type", "dtype", "bw", "is_sym", "scale", "offset", "block_size"}
+        assert exported_encodings["enc_type"] == EncodingType.PER_BLOCK.name
+        assert len(exported_encodings["scale"]) == tensor_shape[channel_axis] * 2
+        assert exported_encodings["block_size"] == block_size
+
     def test_export_float_encodings(self):
         quant_info = libquant_info.QcQuantizeInfo()
         qc_quantize_op = QcQuantizeOp(quant_info, bitwidth=16, op_mode=OpMode.quantizeDequantize)
@@ -852,6 +883,11 @@ class TestBlockwiseQuantizeOp:
         assert len(encodings) == 1
         assert encodings[0]["dtype"] == "float"
         assert encodings[0]["bitwidth"] == 16
+
+        exported_encodings = qc_quantize_op.export_encodings("1.0.0")
+        assert exported_encodings.keys() == {"enc_type", "dtype", "bw"}
+        assert exported_encodings["dtype"] == "FLOAT"
+        assert exported_encodings["bw"] == 16
 
     def test_load_float_encodings(self):
         quant_info = libquant_info.QcQuantizeInfo()

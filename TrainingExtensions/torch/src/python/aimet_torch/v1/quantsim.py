@@ -57,7 +57,7 @@ from aimet_common import quantsim
 from aimet_common.connected_graph.connectedgraph_utils import CG_SPLIT
 from aimet_common.utils import AimetLogger, save_json_yaml, log_with_error_and_assert_if_false
 from aimet_common.defs import QuantScheme, QuantizationDataType, SupportedKernelsAction, QuantDtypeBwInfo
-from aimet_common.quantsim import validate_quantsim_inputs, extract_global_quantizer_args
+from aimet_common.quantsim import validate_quantsim_inputs, extract_global_quantizer_args, VALID_ENCODING_VERSIONS
 from aimet_common.quant_utils import get_conv_accum_bounds
 
 from aimet_torch.v1.nn.modules.custom import MatMul
@@ -76,7 +76,7 @@ from aimet_torch.onnx_utils import (
 from aimet_torch.meta.connectedgraph import ConnectedGraph, Op
 from aimet_torch.qc_quantize_recurrent import QcQuantizeRecurrent
 from aimet_torch.quantsim_config.builder import LazyQuantizeWrapper
-from aimet_torch.experimental.v2.quantsim.export_utils import VALID_ENCODING_VERSIONS, _export_to_1_0_0
+from aimet_torch.experimental.v2.quantsim.export_utils import _export_to_1_0_0
 
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
