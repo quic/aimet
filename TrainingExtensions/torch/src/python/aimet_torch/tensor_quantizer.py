@@ -855,7 +855,7 @@ class LearnedGridTensorQuantizer(TensorQuantizer):
         enc_min_param = self.name + '_encoding_min'
         enc_max_param = self.name + '_encoding_max'
         # TODO: refactor to not call internal state of wrapper
-        params = self.wrapper_ref._parameters
+        params = self.wrapper_ref._parameters # pylint:disable = no-member
 
         # TODO: Remove this check when encodings is always a sequence
         if isinstance(encodings, List):
@@ -884,7 +884,7 @@ class LearnedGridTensorQuantizer(TensorQuantizer):
         enc_min_param = self.name + '_encoding_min'
         enc_max_param = self.name + '_encoding_max'
         # TODO: refactor to not call internal state of wrapper.
-        params = self.wrapper_ref._parameters
+        params = self.wrapper_ref._parameters # pylint:disable = no-member
 
         if params[enc_min_param] is None and params[enc_max_param] is None:
             raise RuntimeError("Encoding can be frozen only when it is not None.")
