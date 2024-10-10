@@ -48,6 +48,7 @@ import onnxsim
 from tqdm import tqdm
 
 # Import AIMET specific modules
+from aimet_common import quantsim
 from aimet_common.utils import AimetLogger
 from aimet_common.defs import QuantScheme, QuantizationDataType
 
@@ -335,7 +336,7 @@ class Adaround:
         :param quant_sim: QunatSim that contains the model and Adaround tensor quantizers
         """
         # pylint: disable=protected-access
-        param_encodings = quant_sim._get_encodings(quant_sim.param_names)
+        param_encodings = quant_sim._get_encodings(quant_sim.param_names, quantsim.encoding_version)
 
         # export encodings to JSON file
         os.makedirs(os.path.abspath(path), exist_ok=True)

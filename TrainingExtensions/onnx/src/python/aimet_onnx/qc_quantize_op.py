@@ -36,10 +36,10 @@
 # =============================================================================
 """ Custom QcQuantizeOp to quantize weights and activations using ONNXRuntime """
 
-from typing import Union, List, Optional
+from typing import Union, List, Optional, Dict
 import aimet_common.libpymo as libpymo
 from aimet_common.libpymo import TensorQuantizerOpMode
-from aimet_common.defs import QuantScheme, MAP_QUANT_SCHEME_TO_PYMO, MAP_ROUND_MODE_TO_PYMO, QuantizationDataType
+from aimet_common.defs import QuantScheme, MAP_QUANT_SCHEME_TO_PYMO, MAP_ROUND_MODE_TO_PYMO, QuantizationDataType, EncodingType
 from aimet_common import libquant_info
 from aimet_common.utils import deprecated
 
@@ -462,6 +462,9 @@ class QcQuantizeOp:
         if encoding_version == '0.6.1':
             return self._export_legacy_encodings()
 
+        if encoding_version == "1.0.0":
+            return self._export_1_0_0_encodings()
+
         raise RuntimeError(f"Unsupported encoding export version: {encoding_version}")
 
     def _export_legacy_encodings(self) -> Union[List, None]:
@@ -490,3 +493,32 @@ class QcQuantizeOp:
             return encodings
 
         raise RuntimeError(f"Exporting data type {self.data_type} not supported")
+
+    def _encoding_type(self):
+        if not self.quant_info.usePerChannelMode:
+            return EncodingType.PER_TENSOR
+        if not self.quant_info.blockSize:
+            return EncodingType.PER_CHANNEL
+        return EncodingType.PER_BLOCK
+
+    def _export_1_0_0_encodings(self) -> Optional[Dict]:
+        """
+        Exports the quantizer's encodings in the "1.0.0" encoding format
+        """
+        if not self.enabled or not self.is_initialized():
+            return None
+
+        enc_dict = dict(enc_type=self._encoding_type().name,
+                        dtype="INT" if self.data_type == QuantizationDataType.int else "FLOAT",
+                        bw=self.bitwidth,
+                        )
+
+        if self.data_type == QuantizationDataType.int:
+            enc_dict["is_sym"] = self.use_symmetric_encodings
+            encodings = self.get_encodings()
+            enc_dict["scale"] = [enc.delta for enc in encodings]
+            enc_dict["offset"] = [enc.offset for enc in encodings]
+            if self.quant_info.blockSize > 0:
+                enc_dict["block_size"] = self.quant_info.blockSize
+
+        return enc_dict
