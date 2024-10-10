@@ -788,7 +788,7 @@ class TestQuantizationSimStaticGrad:
         assert 'layers_deep.5.0' in sim._excluded_layer_names
         assert 'layers_deep.5.1' in sim._excluded_layer_names
 
-        with tempfile.TemporaryDirectory() as tmpdir:
+        with tempfile.TemporaryDirectory() as tmpdir, pytest.warns(DeprecationWarning):
             sim.export(tmpdir, 'modulelist_with_layers_to_ignore', dummy_input=torch.rand(1, 3, 12, 12))
             with open(os.path.join(tmpdir, "modulelist_with_layers_to_ignore.encodings"), "r") as encodings_file:
                 encodings = json.load(encodings_file)
