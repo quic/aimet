@@ -718,12 +718,13 @@ class QuantizationSimModel:
             encoding["name"] = name
         return list(encoding_dict.values())
 
-    def _export_encodings(self, encoding_file_path, enc_version):
+    def _export_encodings(self, encoding_file_path):
         """
         Export encodings to json and yaml file
 
         :param encoding_file_path: path to save the encoding files
         """
+        enc_version = quantsim.encoding_version
         if enc_version not in VALID_ENCODING_VERSIONS:
             raise NotImplementedError(f'Encoding version {enc_version} not in set of valid encoding '
                                       f'versions {VALID_ENCODING_VERSIONS}.')
@@ -770,7 +771,7 @@ class QuantizationSimModel:
         :param path: dir to save encoding files
         :param filename_prefix: filename to save encoding files
         """
-        self._export_encodings(os.path.join(path, filename_prefix) + '.encodings', quantsim.encoding_version)
+        self._export_encodings(os.path.join(path, filename_prefix) + '.encodings')
         self.remove_quantization_nodes()
         if self.model.model.ByteSize() >= onnx.checker.MAXIMUM_PROTOBUF:
             # Note: Saving as external data mutates the saved model, removing all initializer data
