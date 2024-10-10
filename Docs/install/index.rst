@@ -36,30 +36,42 @@
 
 .. _ug-installation:
 
-###################
+##################
 AIMET Installation
-###################
+##################
 
 Quick Install
-~~~~~~~~~~~~~
+-------------
 
-The AIMET PyTorch GPU PyPI packages are available for environments that meet the following requirements:
+The fastest way to install AIMET is to use the AIMET PyTorch GPU PyPI packages.
+
+Prerequisites
+^^^^^^^^^^^^^
+
+The following are required for a quick install:
 
 * 64-bit Intel x86-compatible processor
 * Linux Ubuntu 22.04 LTS [Python 3.10] or Ubuntu 20.04 LTS [Python 3.8]
 * CUDA 12.0
 * Torch 2.2.2
 
-**Pip install**
+Installation
+^^^^^^^^^^^^
+
+- Type the following two commands to install AIMET using PIP:
 
 .. code-block::
 
     apt-get install liblapacke
     python3 -m pip install aimet-torch
 
+Next steps
+^^^^^^^^^^
+
+
 
 Release Packages
-~~~~~~~~~~~~~~~~
+----------------
 
 For other AIMET variants, install the *latest* version from the .whl files hosted at https://github.com/quic/aimet/releases
 
