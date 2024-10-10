@@ -282,7 +282,7 @@ def docstring(doc: str):
 
 def _map_qmodule(modules, func):
     # pylint: disable=import-outside-toplevel
-    # pylint: disable=protected-access
+    # pylint: disable=protected-access, cyclic-import
     from aimet_torch.v2.nn import BaseQuantizationMixin
     contexts = []
     ctx = _ContextManager(action=lambda: None, cleanup=lambda:[context._cleanup() for context in contexts])

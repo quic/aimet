@@ -70,7 +70,7 @@ class QuantizationSimModel(V1QuantizationSimModel):
     """
     Overriden QuantizationSimModel that does off-target quantization simulation using v2 quantsim blocks.
     """
-    def __init__(self, # pylint: disable=too-many-arguments
+    def __init__(self, # pylint: disable=too-many-arguments, too-many-locals
                  model: torch.nn.Module,
                  dummy_input: Union[torch.Tensor, Tuple],
                  quant_scheme: Union[str, QuantScheme] = None, # NOTE: Planned to be deprecated
