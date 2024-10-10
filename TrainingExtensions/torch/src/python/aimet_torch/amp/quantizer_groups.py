@@ -450,7 +450,7 @@ def find_supported_candidates(quantizer_groups: List[QuantizerGroup],
                                    quantizer)
 
             # pylint: disable=protected-access
-            module = module_name_to_module_dict[quantizer]._module_to_wrap.__class__
+            module = module_name_to_module_dict[quantizer]._module_to_wrap
 
             try:
                 backend_type = aimet_op_to_backend_op_name_map[module.__class__]
