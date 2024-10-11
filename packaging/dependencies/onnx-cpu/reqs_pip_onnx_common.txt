@@ -1,1 +1,1 @@
-../reqs_pip_torch_common_legacy.txt
+../reqs_pip_onnx_common.txt

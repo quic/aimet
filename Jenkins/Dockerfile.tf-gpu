@@ -157,7 +157,7 @@ RUN python3 -m pip --no-cache-dir install \
         lmdb==0.95 \
         nbsphinx \
         networkx \
-        'numpy<1.24,>=1.20.5' \
+        'numpy<1.24,>=1.20.0' \
         onnx==1.12.0 \
         opencv-python \
         Pillow==9.3.0 \
@@ -240,6 +240,7 @@ RUN python3 -m pip uninstall -y Pillow Pillow-SIMD
 RUN python3 -m pip --no-cache-dir install Pillow-SIMD==9.0.0.post1
 
 RUN apt-get update && apt-get install -y gnupg2
+# Downloaded from https://apt.llvm.org/
 RUN wget -O - http://llvm.org/apt/llvm-snapshot.gpg.key|sudo apt-key add - && echo "deb http://apt.llvm.org/jammy/ llvm-toolchain-jammy-14 main" >> /etc/apt/sources.list
 RUN apt-get update --fix-missing -y && apt upgrade -y && apt-get install -y clang-11 clang-format clang-tidy-11 && \
    rm -rf /var/lib/apt/lists/*
