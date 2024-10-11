@@ -1469,6 +1469,7 @@ class QuantizationSimModel:
                         for idx, (input_quantizer, inp) in \
                             enumerate(zip(qc_quantize_wrapper.input_quantizers, conn_graph_op.inputs)):
                             input_quantizer.is_const = inp.is_const
+                            input_quantizer.is_parm = inp.is_parm
                             input_quantizer.is_singleton = (input_tensor_shape_list is not None \
                                                             and input_tensor_shape_list[0][idx] is not None \
                                                             and input_tensor_shape_list[0][idx].numel() == 1)
