@@ -1127,7 +1127,7 @@ class TestQuantsim:
         Given: A model with python float constant
         When: Instantiate quantsim and run compute_encodings
         Then: 1. The input quantizer quantizing buffer constant should be enabled
-              2. The max value of quantizer should be the constant value
+              2. The quantizer should not be initialized
         """
                 
         class PythonFloatModel(torch.nn.Module):
@@ -1146,7 +1146,7 @@ class TestQuantsim:
         sim.model(dummy_input)
 
         assert sim.model.module.input_quantizers[1] is not None
-        assert sim.model.module.input_quantizers[1].get_max().item() == 2.0
+        assert not sim.model.module.input_quantizers[1].is_initialized()
 
 
 class TestQuantsimUtilities:

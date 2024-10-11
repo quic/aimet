@@ -63,7 +63,6 @@ from torch._VF import ( # pylint: disable=no-name-in-module
     rnn_tanh_cell as _rnn_tanh_cell,
 )
 
-from aimet_torch import utils
 from aimet_torch.v2.quantization.base import QuantizerBase
 from aimet_torch.v2.quantization.tensor import QuantizedTensorBase
 from aimet_torch.v2.utils import patch_attr, _ContextManager, allow_recompute
@@ -74,9 +73,6 @@ def _quantize_if_applicable(data: Any, quantizer: Optional[QuantizerBase]):
     """
     Quantize data if it is a quantizable type and quantize is not None
     """
-    if quantizer and isinstance(data, float):
-        data = torch.tensor(data, dtype=torch.float32, device=utils.get_device(quantizer))
-
     if quantizer and isinstance(data, Tensor) and data.is_floating_point():
         if isinstance(data, QuantizedTensorBase):
             data = data.dequantize()
@@ -93,9 +89,6 @@ def _dequantize_if_applicable(data: torch.Tensor):
 
 
 def _quantize_dequantize_if_applicable(data, quantizer):
-    if quantizer and isinstance(data, float):
-        data = torch.tensor(data, dtype=torch.float32, device=utils.get_device(quantizer))
-
     if quantizer and isinstance(data, Tensor) and data.is_floating_point():
         if isinstance(data, QuantizedTensorBase):
             data = data.dequantize()
