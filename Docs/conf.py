@@ -233,31 +233,17 @@ autoclass_content = 'both'
 nbsphinx_allow_errors = True
 nbsphinx_execute = 'never'
 
-docs_root_url = "https://quic.github.io/aimet-pages/releases/latest/"
-
-# Version here refers to the AIMET torch v1/v2 version, not the AIMET release number
-html_context = {
-  'current_version' : "Universal",
-  'versions' : [["Universal", docs_root_url + "user_guide/index.html"],
-                ["PyTorch", docs_root_url + "torch_v2/torch_docs/index.html"]],
-  'display_version_tab': False
-}
-
 autosummary_generate = False
 
 # contains a list of modules to be mocked up which are not available during docs build time
 autodoc_mock_imports = []
-
 # aimet_common
 autodoc_mock_imports.append("aimet_common.libpymo")
-
 # aimet_torch
 # TODO (hitameht): remove ``onnxscript`` module once we build docs using separate environment
 autodoc_mock_imports.extend(["aimet_common.aimet_tensor_quantizer", "aimet_common.AimetTensorQuantizer", "onnxscript"])
-
 # aimet_tensorflow
 autodoc_mock_imports.append("aimet_common.libaimet_tf_ops")
-
 # aimet_onnx
 # TODO (hitameht): remove ``onnxruntime`` module once we build docs using separate environment
 autodoc_mock_imports.extend(["aimet_common.libquant_info", "onnxruntime"])
