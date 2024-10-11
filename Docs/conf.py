@@ -244,14 +244,20 @@ html_context = {
 }
 
 autosummary_generate = False
+
+# contains a list of modules to be mocked up which are not available during docs build time
 autodoc_mock_imports = []
+
 # aimet_common
 autodoc_mock_imports.append("aimet_common.libpymo")
+
 # aimet_torch
 # TODO (hitameht): remove ``onnxscript`` module once we build docs using separate environment
-autodoc_mock_imports.append("onnxscript")
+autodoc_mock_imports.extend(["aimet_common.aimet_tensor_quantizer", "aimet_common.AimetTensorQuantizer", "onnxscript"])
+
 # aimet_tensorflow
 autodoc_mock_imports.append("aimet_common.libaimet_tf_ops")
+
 # aimet_onnx
 # TODO (hitameht): remove ``onnxruntime`` module once we build docs using separate environment
 autodoc_mock_imports.extend(["aimet_common.libquant_info", "onnxruntime"])
