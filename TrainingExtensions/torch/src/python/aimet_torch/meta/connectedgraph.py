@@ -44,6 +44,7 @@ result of an operation. Furthermore the graph representation is bi-directional."
 
 import copy
 from collections import defaultdict
+import inspect
 from typing import Tuple, Union, List, Dict, Type, Optional
 import torch
 
@@ -137,6 +138,7 @@ class ConnectedGraph(AimetCommonConnectedGraph):
         either module or functional) as producers and consumers of tensors.
         Note that the graph has two kinds of nodes: operations and products."""
 
+    # pylint: disable=too-many-instance-attributes
     def __init__(self, model: torch.nn.Module, model_input: Union[torch.Tensor, Tuple]):
         """
         Init function for connected graph.
@@ -157,7 +159,12 @@ class ConnectedGraph(AimetCommonConnectedGraph):
 
         self._generate_module_lookup_table(model)
         with in_eval_mode(model), torch.no_grad():
+            self._aimet_defined_modules = \
+                tuple(classtype for _, classtype in inspect.getmembers(aimet_modules,
+                                                                       lambda m: inspect.isclass(m) and issubclass(m,
+                                                                                                                   torch.nn.Module)))
             self._construct_graph(model, model_input)
+            del self._aimet_defined_modules
 
         # List of ops in the order they are traversed using the forward function
         self.ordered_ops = self._get_ordered_ops()
@@ -1242,7 +1249,7 @@ class ConnectedGraph(AimetCommonConnectedGraph):
         recursive_parsing_needed = True
         if is_torch_nn_leaf_module(module) or \
                 is_custom_leaf_module(module, self._find_aten_nodes_in_forward_pass(trace)) or \
-                isinstance(module, tuple(aimet_torch.utils.modules_to_treat_as_leaf)):
+                isinstance(module, (self._aimet_defined_modules, tuple(aimet_torch.utils.modules_to_treat_as_leaf))):
             recursive_parsing_needed = False
 
         return recursive_parsing_needed
