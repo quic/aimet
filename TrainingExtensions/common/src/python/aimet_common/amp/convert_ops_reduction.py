@@ -148,8 +148,8 @@ class ReduceConvertOps(abc.ABC):
         for node in G_copy.nodes:
             if node not in ["input_ops", "output_ops"]:
                 if ("input_ops", node) in G_copy.edges:  # quantizer groups with an input quantizer
-                    try:
-                        module_name, _ = find_wrapper_module(node, module_name_to_module_dict)
+                    module_name, _ = find_wrapper_module(node, module_name_to_module_dict)
+                    if module_name is not None:
                         mapping = {node: module_name + "_output"}
                         G = nx.relabel_nodes(G, mapping)
 
@@ -173,14 +173,14 @@ class ReduceConvertOps(abc.ABC):
 
                         G.nodes[new_node_name]["tensor_dims"] = input_shape
                         G.nodes[new_node_name]["tensor_size"] = input_size
-                    except:
+                    else:
                         _logger.info("did not change node name: %s", node)
                 else:
-                    try:
-                        module_name, _ = find_wrapper_module(node, module_name_to_module_dict)
+                    module_name, _ = find_wrapper_module(node, module_name_to_module_dict)
+                    if module_name is not None:
                         mapping = {node: module_name + "_output"}
                         G = nx.relabel_nodes(G, mapping)
-                    except:
+                    else:
                         _logger.info("did not change node name: %s", node)
 
         G.remove_node("input_ops")

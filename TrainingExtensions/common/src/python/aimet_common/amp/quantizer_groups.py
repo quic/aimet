@@ -199,7 +199,6 @@ def get_supported_candidates_for_quantizers(quantizers: List,
                 # Store candidates for quantizer
                 store_candidates_for_quantizer(supported_kernels, op, amp_candidates_set, act_bw_set, act_and_param_set,
                                                act_only_set, null_intersection_ops)
-                break
 
         # Default candidate selected if op not found in supported kernels
         if not ops_found:

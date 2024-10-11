@@ -1111,19 +1111,17 @@ class TestAutoMixedPrecision:
             # default_supported_kernels and conv_supported_kernels are the configurations added in the json file above.
             default_supported_kernels = [((16, QuantizationDataType.int), (16, QuantizationDataType.int)),
                                          ((16, QuantizationDataType.float), (16, QuantizationDataType.float)),
-                                         ((8, QuantizationDataType.float), (16, QuantizationDataType.float))]
+                                         ((8, QuantizationDataType.int), (16, QuantizationDataType.int))]
 
             conv_supported_kernels = [((16, QuantizationDataType.float), (16, QuantizationDataType.float)),
                                       ((8, QuantizationDataType.int), (16, QuantizationDataType.int))]
 
             for quantizer_group, quantizer_candidates in algo._supported_candidates_per_quantizer_group.items():
-                quantizers = sorted(itertools.chain(quantizer_group.get_input_quantizer_modules(),
-                                                    quantizer_group.output_quantizers,
-                                                    quantizer_group.parameter_quantizers))
+                supported_kernel_ops = quantizer_group.supported_kernel_ops
                 onnx_types = []
-                for q in quantizers:
+                for op in supported_kernel_ops:
                     onnx_types.append(
-                        onnx_utils.map_torch_types_to_onnx.get(type(algo._module_name_dict[q]._module_to_wrap)))
+                        onnx_utils.map_torch_types_to_onnx.get(type(algo._module_name_dict[op]._module_to_wrap)))
 
                 # verify to make sure the candidates returned is always part of amp_candidates and they are part of
                 # "Defaults" or "Conv" appropriately
