@@ -43,10 +43,12 @@ from aimet_common.amp.quantizer_groups import reformat_supported_kernels
 from aimet_torch.batch_norm_fold import fold_all_batch_norms
 from aimet_torch.examples.test_models import SingleResidual, ConcatModel
 from aimet_torch.quantsim import QuantizationSimModel
-from aimet_torch.amp.quantizer_groups import find_quantizer_group, find_op_groups, find_supported_candidates
+from aimet_torch.amp.quantizer_groups import find_quantizer_group, find_op_groups, find_supported_candidates, \
+    QuantizerGroup
 from aimet_torch import utils
 from aimet_torch.meta.connectedgraph import ConnectedGraph
 from aimet_torch import onnx_utils
+from aimet_torch.v1.nn.modules import custom
 from torchvision.models import mobilenet_v3_large as mobilenetv3
 from models import test_models
 
@@ -353,13 +355,11 @@ class TestQuantizerGroups:
         assert ((16, QuantizationDataType.float), (16, QuantizationDataType.float)) in max_candidate_options
 
         for quantizer_group, candidates in quantizer_groups_with_supported_candidates.items():
-            quantizers = sorted(set(quantizer_group.get_input_quantizer_modules() +
-                                    quantizer_group.output_quantizers +
-                                    quantizer_group.parameter_quantizers))
+            supported_kernel_ops = quantizer_group.supported_kernel_ops
             onnx_types = []
-            for quantizer in quantizers:
+            for op in supported_kernel_ops:
                 onnx_types.append(
-                    onnx_utils.map_torch_types_to_onnx.get(type(module_name_to_module_dict[quantizer]._module_to_wrap)))
+                    onnx_utils.map_torch_types_to_onnx.get(type(module_name_to_module_dict[op]._module_to_wrap)))
 
             # verify to make sure the candidates returned is always part of amp_candidates and they are part of
             # either "Conv" or "Defaults"
@@ -408,3 +408,101 @@ class TestQuantizerGroups:
         sim = QuantizationSimModel(model, dummy_input=dummy_input)
         _, quantizer_groups = find_quantizer_group(sim)
         assert len(quantizer_groups) == 5
+
+    def test_supported_kernel_ops(self):
+        class Model(torch.nn.Module):
+            def __init__(self):
+                super(Model, self).__init__()
+                self.relu1 = torch.nn.ReLU()
+                self.relu2 = torch.nn.ReLU()
+                self.add = custom.Add()
+                self.relu3 = torch.nn.ReLU()
+                self.relu4 = torch.nn.ReLU()
+
+            def forward(self, inp, inp2):
+                x1 = self.relu1(inp)
+                x2 = self.relu2(inp2)
+                x = self.add(x1, x2)
+                x1 = self.relu3(x)
+                x2 = self.relu4(x)
+                return x1, x2
+
+        model = Model()
+        dummy_input = (torch.randn(1, 3), torch.randn(1, 3))
+        sim = QuantizationSimModel(model, dummy_input=dummy_input)
+        _, quantizer_groups = find_quantizer_group(sim)
+        assert len(quantizer_groups) == 7
+
+        expected_groups = [QuantizerGroup(input_quantizers=('relu1_input_quantizer_idx_0',),
+                                          supported_kernel_ops=('relu1',)),
+                           QuantizerGroup(input_quantizers=('relu2_input_quantizer_idx_0',),
+                                          supported_kernel_ops=('relu2',)),
+                           QuantizerGroup(output_quantizers=('relu1',),
+                                          supported_kernel_ops=('add',)),
+                           QuantizerGroup(output_quantizers=('relu2',),
+                                          supported_kernel_ops=('add',)),
+                           QuantizerGroup(output_quantizers=('add',),
+                                          supported_kernel_ops=('relu3', 'relu4')),
+                           QuantizerGroup(output_quantizers=('relu3',),
+                                          supported_kernel_ops=tuple()),
+                           QuantizerGroup(output_quantizers=('relu4',),
+                                          supported_kernel_ops=tuple())]
+        for group in expected_groups:
+            assert group in quantizer_groups
+
+    def test_find_supported_kernels(self):
+        quantizer_groups_to_test = [QuantizerGroup(input_quantizers=('inp1_input_quantizer_idx_0', 'inp2_input_quantizer_idx_0'),
+                                                   supported_kernel_ops=tuple()),
+                                    QuantizerGroup(input_quantizers=('inp1_input_quantizer_idx_0', 'inp2_input_quantizer_idx_0'),
+                                                   supported_kernel_ops=('op1',)),
+                                    QuantizerGroup(input_quantizers=('inp1_input_quantizer_idx_0', 'inp2_input_quantizer_idx_0'),
+                                                   supported_kernel_ops=('op1', 'op2')),
+                                    QuantizerGroup(output_quantizers=('inp1', 'inp2'),
+                                                   supported_kernel_ops=('op1', 'op2')),
+                                    QuantizerGroup(parameter_quantizers=('inp1', 'inp2'),
+                                                   supported_kernel_ops=('op1', 'op2'))]
+        amp_candidates = [((2, QuantizationDataType.int), (2, QuantizationDataType.int)),
+                          ((3, QuantizationDataType.int), (3, QuantizationDataType.int)),
+                          ((4, QuantizationDataType.int), (4, QuantizationDataType.int)),
+                          ((5, QuantizationDataType.int), (5, QuantizationDataType.int))]
+        supported_kernels = {
+            'defaults': [((2, QuantizationDataType.int), (2, QuantizationDataType.int)),
+                         ((3, QuantizationDataType.int), (3, QuantizationDataType.int)),
+                         ((4, QuantizationDataType.int), (4, QuantizationDataType.int))],
+            'Conv': [((2, QuantizationDataType.int), (2, QuantizationDataType.int)),
+                     ((3, QuantizationDataType.int), (3, QuantizationDataType.int))],
+            'Relu': [((2, QuantizationDataType.int), (2, QuantizationDataType.int))],
+        }
+
+        class MockWrapper:
+            def __init__(self, module_to_wrap):
+                self._module_to_wrap = module_to_wrap
+
+        module_name_to_module_dict = {
+            'op1': MockWrapper(torch.nn.Conv2d(3, 8, (2, 2))),
+            'op2': MockWrapper(torch.nn.ReLU())
+        }
+
+        supported_kernel_dict, _ = find_supported_candidates(quantizer_groups_to_test,
+                                                             amp_candidates,
+                                                             supported_kernels,
+                                                             module_name_to_module_dict,
+                                                             False)
+
+        assert set(supported_kernel_dict[quantizer_groups_to_test[0]]) == {
+            ((2, QuantizationDataType.int), (2, QuantizationDataType.int)),
+            ((3, QuantizationDataType.int), (3, QuantizationDataType.int)),
+            ((4, QuantizationDataType.int), (4, QuantizationDataType.int))}
+
+        assert set(supported_kernel_dict[quantizer_groups_to_test[1]]) == {
+            ((2, QuantizationDataType.int), (2, QuantizationDataType.int)),
+            ((3, QuantizationDataType.int), (3, QuantizationDataType.int))}
+
+        assert set(supported_kernel_dict[quantizer_groups_to_test[2]]) == {
+            ((2, QuantizationDataType.int), (2, QuantizationDataType.int))}
+
+        assert set(supported_kernel_dict[quantizer_groups_to_test[3]]) == {
+            ((2, QuantizationDataType.int), (2, QuantizationDataType.int))}
+
+        assert set(supported_kernel_dict[quantizer_groups_to_test[4]]) == {
+            ((2, QuantizationDataType.int), (2, QuantizationDataType.int))}
