@@ -13,8 +13,9 @@ Top-level API
 
 |
 
-**Note about Quantization Schemes** : Since ONNX Runtime will be used for optimized inference only, ONNX
-framework will support Post Training Quantization schemes i.e. TF or TF-enhanced to compute the encodings.
+**Points to note** :
+ - Passing model path instead of model, will save runtime memory equal to size of the model.
+ - **Note about Quantization Schemes** : Since ONNX Runtime will be used for optimized inference only, ONNX framework will support Post Training Quantization schemes i.e. TF or TF-enhanced to compute the encodings.
 
 **The following API can be used to Compute Encodings for Model**
 

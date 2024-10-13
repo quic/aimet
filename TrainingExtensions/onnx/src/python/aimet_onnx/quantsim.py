@@ -42,6 +42,7 @@ from dataclasses import dataclass
 from pathlib import Path
 import os
 from typing import Dict, List, Union, Tuple, Optional
+import gc
 import json
 import warnings
 import numpy as np
@@ -143,7 +144,7 @@ class QuantizationSimModel:
 
     # pylint: disable=too-many-arguments, too-many-locals, too-many-instance-attributes
     def __init__(self,
-                 model: ModelProto,
+                 model: ModelProto|str,
                  dummy_input: Dict[str, np.ndarray] = None,
                  quant_scheme: QuantScheme = QuantScheme.post_training_tf_enhanced,
                  rounding_mode: str = 'nearest',
@@ -156,7 +157,7 @@ class QuantizationSimModel:
         """
         Constructor
 
-        :param model: ONNX model or path to model
+        :param model: ONNX model or path to model. Passing model path instead of model, will save memory equal to size of the model.
         :param dummy_input: Dummy input to the model. If None, will attempt to auto-generate a dummy input
         :param quant_scheme: Quantization scheme (e.g. QuantScheme.post_training_tf)
         :param rounding_mode: Rounding mode (e.g. nearest)
@@ -173,6 +174,11 @@ class QuantizationSimModel:
         :param user_onnx_libs: List of paths to all compiled ONNX custom ops libraries
         :param path: Directory to save the artifacts.
         """
+        is_path_to_model = False
+        if(isinstance(model, str)):
+            model = onnx.load_model(model)
+            is_path_to_model = True
+
         self.model = model
         if not isinstance(model, ONNXModel):
             self.model = ONNXModel(model)
@@ -183,6 +189,10 @@ class QuantizationSimModel:
             # pylint: disable=bare-except
             except:
                 logger.info('ONNX Simplifier failed. Proceeding with unsimplified model.')
+
+        if is_path_to_model == True:
+            del model
+            gc.collect()
 
         if not dummy_input:
             dummy_input = make_dummy_input(self.model.model)
