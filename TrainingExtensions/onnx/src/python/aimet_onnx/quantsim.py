@@ -42,7 +42,6 @@ from dataclasses import dataclass
 from pathlib import Path
 import os
 from typing import Dict, List, Union, Tuple, Optional
-import gc
 import json
 import warnings
 import numpy as np
@@ -174,25 +173,18 @@ class QuantizationSimModel:
         :param user_onnx_libs: List of paths to all compiled ONNX custom ops libraries
         :param path: Directory to save the artifacts.
         """
-        is_path_to_model = False
-        if isinstance(model, str):
-            model = onnx.load_model(model)
-            is_path_to_model = True
-
-        self.model = model
-        if not isinstance(model, ONNXModel):
-            self.model = ONNXModel(model)
-
         if simplify_model:
             try:
-                self.model.model, _ = simplify(self.model.model)
+                model = model.model if isinstance(model, ONNXModel) else model
+                model, _ = simplify(model)
             # pylint: disable=bare-except
             except:
                 logger.info('ONNX Simplifier failed. Proceeding with unsimplified model.')
 
-        if is_path_to_model is True:
-            del model
-            gc.collect()
+        #Load model in case it didn't simplify and was passed as path string
+        self.model = onnx.load_model(model) if isinstance(model, str) else model
+        if not isinstance(self.model, ONNXModel):
+            self.model = ONNXModel(model)
 
         if not dummy_input:
             dummy_input = make_dummy_input(self.model.model)
