@@ -426,8 +426,7 @@ class QuantizationSimModel:
                                                           op_mode=OpMode.oneShotQuantizeDequantize,
                                                           bitwidth=self._default_param_bw,
                                                           use_symmetric_encodings=self._use_symmetric_encodings,
-                                                          tensor_quantizer_params=tensor_quantizer_params,
-                                                          use_cuda=self._use_cuda)
+                                                          tensor_quantizer_params=tensor_quantizer_params)
 
     def _create_quant_info_object_for_param(self, param_name: str):
         """
@@ -492,8 +491,7 @@ class QuantizationSimModel:
                                                           rounding_mode=self._rounding_mode,
                                                           op_mode=OpMode.updateStats,
                                                           bitwidth=self._default_activation_bw,
-                                                          use_symmetric_encodings=self._use_symmetric_encodings,
-                                                          use_cuda=self._use_cuda)
+                                                          use_symmetric_encodings=self._use_symmetric_encodings)
 
     @staticmethod
     def build_session(model: onnx.ModelProto, providers: List, user_onnx_libs: List[str] = None, path: str = None):
@@ -1204,23 +1202,6 @@ def clamp_activation_encodings(quant_sim: QuantizationSimModel, clamp_val: float
     :param clamp_val: positive float value
     :return:
     """
-    def clip_and_recompute_encodings(act_quantizer, act_name, clamp_val):
-        if (not act_quantizer) or (not act_quantizer.encodings) or (not act_quantizer.enabled):
-            return
-        qmin = act_quantizer.encodings[0].min
-        qmax = act_quantizer.encodings[0].max
-        if qmin < -clamp_val or qmax > clamp_val:
-            is_frozen = act_quantizer._is_encoding_frozen
-            act_quantizer._is_encoding_frozen = False
-            tensor = np.clip(np.array([qmin, qmax]), -clamp_val, clamp_val)
-            act_quantizer.reset_encoding_stats()
-            act_quantizer.update_encoding_stats(tensor)
-            act_quantizer.compute_encodings()
-            act_quantizer._is_encoding_frozen = is_frozen
-
-            logger.info(f"{act_name} activation clamped... before: {qmin}, {qmax} | after: {np.min(tensor)}, {np.max(tensor)}")
-
-    if "tf" in quant_sim.quant_args['quant_scheme']:
-        for name in quant_sim.activation_names:
-            quantizer = quant_sim.qc_quantize_op_dict.get(name)
-            clip_and_recompute_encodings(quantizer, name, clamp_val)
+    for name in quant_sim.activation_names:
+        quantizer = quant_sim.qc_quantize_op_dict.get(name)
+        quantizer.clip_and_recompute_encodings(name, clamp_val)

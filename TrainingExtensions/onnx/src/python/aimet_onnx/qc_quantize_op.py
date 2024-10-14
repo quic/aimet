@@ -43,8 +43,9 @@ import aimet_common.libpymo as libpymo
 from aimet_common.libpymo import TensorQuantizerOpMode
 from aimet_common.defs import QuantScheme, MAP_QUANT_SCHEME_TO_PYMO, MAP_ROUND_MODE_TO_PYMO, QuantizationDataType, EncodingType
 from aimet_common import libquant_info
-from aimet_common.utils import deprecated
+from aimet_common.utils import deprecated, AimetLogger
 
+logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
 
 OpMode = TensorQuantizerOpMode
 
@@ -65,6 +66,7 @@ class TensorQuantizerParams:
         self.block_axis = block_axis
 
 
+# pylint: disable=too-many-public-methods
 class QcQuantizeOp:
     """ A custom quantization operation to perform using ONNXRuntime """
 
@@ -74,7 +76,7 @@ class QcQuantizeOp:
                  rounding_mode: str = 'nearest',
                  op_mode: Union[OpMode, None] = None,
                  bitwidth: int = 8, use_symmetric_encodings: bool = False,
-                 tensor_quantizer_params: Union[TensorQuantizerParams, None] = None, use_cuda: bool = False):
+                 tensor_quantizer_params: Union[TensorQuantizerParams, None] = None):
         """
         Args:
             quant_info: libquant_info.QcQuantizeInfo object holding quantization parameters passed to the C++ op
@@ -84,7 +86,6 @@ class QcQuantizeOp:
             bitwidth: Quantization bitwidth
             use_symmetric_encodings: True if symmetric encoding is used.  False otherwise.
             tensor_quantizer_params: Parameters like number of output channels, axis if per channel quantization is performed
-            use_cuda: True if cuda device is used
         """
         self.quant_info = quant_info
         self.quant_scheme = quant_scheme
@@ -99,7 +100,6 @@ class QcQuantizeOp:
         self._data_type = QuantizationDataType.int
         self.tensor_quantizer_params = tensor_quantizer_params
         self._reset_encodings()
-        self._use_cuda = use_cuda
 
     def is_encoding_frozen(self) -> bool:
         """ Returns is_encoding_frozen var """
@@ -534,4 +534,23 @@ class QcQuantizeOp:
         :param tensor: Tensor to use for updating the encodings stats
         """
         for tensor_quantizer in self._tensor_quantizer:
-            tensor_quantizer.updateStats(tensor, self._use_cuda)
+            tensor_quantizer.updateStats(tensor, False)
+
+    def clip_and_recompute_encodings(self, tensor_name: str, clamp_val: float):
+        """
+        Clips min and max values and recomputes the encodings
+        :param tensor_name: name of the tensor associated with the qc_quantize_op
+        :param clamp_val: clamping value
+        :return:
+        """
+        encodings = self.get_encodings()
+        if (not encodings) or (not self.enabled) or self._is_encoding_frozen:
+            return
+        qmin = encodings[0].min
+        qmax = encodings[0].max
+        if qmin < -clamp_val or qmax > clamp_val:
+            tensor = np.clip(np.array([qmin, qmax]), -clamp_val, clamp_val)
+            self.reset_encoding_stats()
+            self.update_encoding_stats(tensor)
+            self.compute_encodings()
+            logger.info("Clamped tensor %s. Before: %f, %f | After: %f, %f", tensor_name, qmin, qmax, np.min(tensor), np.max(tensor))
