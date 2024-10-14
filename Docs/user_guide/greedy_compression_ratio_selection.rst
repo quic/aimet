@@ -9,7 +9,7 @@ AIMET greedy compression ratio selection
 Overview
 ========
 
-Spatial SVD (SSVD) and channel pruning (CP) work on individual layers of a model. Not all the layers are equally compressible, so compression of a given layer has a variable impact on the final model accuracy. The greedy per-layer compression ratio selection algorithm assesses the sensitivity of layers to compression and finds an appropriate compression ratio for each layer. The algorithm ensures that the model maintains the highest possible accuracy while meeting the target compression ratio.
+Spatial SVD and channel pruning (CP) work on individual layers of a model. Not all the layers are equally compressible, so compression of a given layer has a variable impact on the final model accuracy. The greedy per-layer compression ratio selection algorithm assesses the sensitivity of layers to compression and finds an appropriate compression ratio for each layer. The algorithm ensures that the model maintains the highest possible accuracy while meeting the target compression ratio.
 
 How it works
 ============
@@ -24,7 +24,7 @@ Inputs to the process include:
 - The original model
 - An evaluation function that produces a single performance number
 - A target compression ratio
-- A pruning method (channel pruning, SSVD, or other)
+- A pruning method (channel pruning, spatial SVD, or other)
 
 The following figures provide a high-level overview. Details of each step follow. 
 
