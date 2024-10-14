@@ -34,115 +34,175 @@
    #  @@-COPYRIGHT-END-@@
    # =============================================================================
 
+.. role:: hideitem
+   :class: hideitem
+
 .. _ug-installation:
 
 ##################
 AIMET Installation
 ##################
 
-Quick Install
--------------
+This page contains instructions for the following installation scenarios:
 
-The fastest way to install AIMET is to use the AIMET PyTorch GPU PyPI packages.
+- :ref:`Quick Install of the latest version for PyTorch <idx-install-quick>`
+- :ref:`Installation of the latest version for all platforms from release packages <idx-install-latest>`
+- :ref:`Installation of older versions <idx-install-older>`
 
-Prerequisites
-^^^^^^^^^^^^^
+You can also:
 
-The following are required for a quick install:
+- :doc:`Install manually <install_host>`
+- :doc:`Install a Docker image, including from a pre-built image or local build <install_docker>`
 
-* 64-bit Intel x86-compatible processor
-* Linux Ubuntu 22.04 LTS [Python 3.10] or Ubuntu 20.04 LTS [Python 3.8]
-* CUDA 12.0
-* Torch 2.2.2
-
-Installation
-^^^^^^^^^^^^
-
-- Type the following two commands to install AIMET using PIP:
-
-.. code-block::
-
-    apt-get install liblapacke
-    python3 -m pip install aimet-torch
-
-Next steps
-^^^^^^^^^^
-
-
-
-Release Packages
-----------------
-
-For other AIMET variants, install the *latest* version from the .whl files hosted at https://github.com/quic/aimet/releases
-
-**PyTorch**
-
-.. parsed-literal::
-
-    # Pytorch 2.1 with CUDA 12.x
-    python3 -m pip install |download_url|\ |version|/aimet_torch-\ |version|.cu121\ |whl_suffix|
-
-    # Pytorch 2.1 CPU only
-    python3 -m pip install |download_url|\ |version|/aimet_torch-\ |version|.cpu\ |whl_suffix|
+.. note::
     
-    # Pytorch 1.13 with CUDA 11.x
-    python3 -m pip install |download_url|\ |version|/aimet_torch-\ |version|.cu117\ |whl_suffix|
+    The following system requirements apply to all installations.
 
-
-**TensorFlow**
-
-.. parsed-literal::
-
-    # Tensorflow 2.10 GPU with CUDA 11.x
-    python3 -m pip install |download_url|\ |version|/aimet_tensorflow-\ |version|.cu118\ |whl_suffix|
-
-    # Tensorflow 2.10 CPU only
-    python3 -m pip install |download_url|\ |version|/aimet_tensorflow-\ |version|.cpu\ |whl_suffix|
-
-
-**Onnx**
-
-.. parsed-literal::
-
-    # ONNX 1.16 GPU with CUDA 11.x
-    python3 -m pip install |download_url|\ |version|/aimet_onnx-\ |version|.cu117\ |whl_suffix|
-
-    # ONNX 1.16 CPU
-    python3 -m pip install |download_url|\ |version|/aimet_onnx-\ |version|.cpu\ |whl_suffix|
-
-
-For older versions, please browse the releases at https://github.com/quic/aimet/releases and follow the documentation corresponding to that release to select and install the appropriate package.
-
-.. |whl_suffix| replace:: -cp310-cp310-manylinux_2_34_x86_64.whl
-.. |download_url| replace:: \https://github.com/quic/aimet/releases/download/
-
-System Requirements
-~~~~~~~~~~~~~~~~~~~
+System requirements
+===================
 
 The AIMET package requires the following host platform setup:
 
 * 64-bit Intel x86-compatible processor
-* Linux Ubuntu: 22.04 LTS
+* Linux Ubuntu 22.04 LTS (Python 3.10) or Ubuntu 20.04 LTS (Python 3.8)
 * bash command shell
 * For GPU variants:
     * Nvidia GPU card (Compute capability 5.2 or later)
+    * Nvidia driver version 455 or later (using the latest driver is recommended; both CUDA and cuDNN are supported)
     * nvidia-docker - Installation instructions: https://github.com/NVIDIA/nvidia-docker
 
-To use the GPU accelerated training modules an Nvidia CUDA enabled GPU with a minimum Nvidia driver version of 455+ is required. Using the latest driver is always recommended, especially if using a newer GPU. Both CUDA and cuDNN (the more advanced CUDA interface) enabled GPUs are supported.
+.. _idx-install-quick:
+
+Quick Install
+=============
+
+The fastest way to install AIMET is to use the AIMET PyTorch GPU PyPI packages.
+
+Prerequisites
+-------------
+
+The following software versions are required for the quick install:
+
+* CUDA 12.0
+* Torch 2.2.2
+
+Ensure that you have the LAPACK linear algebra package installed:
+
+.. code-block::
+
+    apt-get install liblapacke
+
+Installation
+------------
+
+- **Type the following command to install AIMET using Pip:**
+
+.. code-block::
+
+    python3 -m pip install aimet-torch
 
 
-Advanced Installation Instructions
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Next steps
+----------
 
-There are two ways to setup and install AIMET:
-    * On your host machine
-    * Using our pre-built development `Docker images <https://artifacts.codelinaro.org/ui/native/codelinaro-aimet/aimet-dev>`_
+See the :doc:`Quantization User Guide </user_guide/model_quantization>` for a discussion of how to use AIMET quantization.
 
-Please click on the appropriate link for installation instructions:
+See the :doc:`Examples Documentation </user_guide/examples>` to try AIMET on example quantization and compression problems.
+
+
+.. _idx-install-latest:
+
+Installing  the latest version with release packages
+====================================================
+
+Install the latest version of any AIMET variant from the **.whl** files hosted at https://github.com/quic/aimet/releases.
+
+Choose and install a package
+----------------------------
+
+Use one of the following commands to install AIMET based on your choice of framework and GPU option.
+
+.. note::
+    
+    Python dependencies are automatically installed.
+
+**PyTorch 2.1**
+
+With CUDA 12.x:
+
+.. parsed-literal::
+
+   python3 -m pip install |download_url|\ |version|/aimet_torch-\ |version|.cu121\ |whl_suffix|
+
+With CPU only:
+
+.. parsed-literal::
+
+    python3 -m pip install |download_url|\ |version|/aimet_torch-\ |version|.cpu\ |whl_suffix|
+
+With CUDA 11.x:
+
+.. parsed-literal::
+
+    python3 -m pip install |download_url|\ |version|/aimet_torch-\ |version|.cu117\ |whl_suffix|
+
+
+**Tensorflow 2.10 GPU**
+
+With CUDA 11.x:
+
+.. parsed-literal::
+
+    python3 -m pip install |download_url|\ |version|/aimet_tensorflow-\ |version|.cu118\ |whl_suffix|
+
+With CPU only:
+
+.. parsed-literal::
+
+    python3 -m pip install |download_url|\ |version|/aimet_tensorflow-\ |version|.cpu\ |whl_suffix|
+
+
+**ONNX 1.16 GPU**
+
+With CUDA 11.x:
+
+.. parsed-literal::
+
+    python3 -m pip install |download_url|\ |version|/aimet_onnx-\ |version|.cu117\ |whl_suffix|
+
+With CPU only:
+
+.. parsed-literal::
+
+    python3 -m pip install |download_url|\ |version|/aimet_onnx-\ |version|.cpu\ |whl_suffix|
+
+
+Next steps
+----------
+
+See the :doc:`Quantization User Guide </user_guide/model_quantization>` for a discussion of how to use AIMET quantization.
+
+See the :doc:`Examples Documentation </user_guide/examples>` to try AIMET on example quantization and compression problems.
+
+
+.. _idx-install-older:
+
+Installing an older version
+===========================
+
+View the release notes for older versions at https://github.com/quic/aimet/releases. Follow the documentation corresponding to that release to select and install the appropriate package.
+
+.. |whl_suffix| replace:: -cp310-cp310-manylinux_2_34_x86_64.whl
+.. |download_url| replace:: \https://github.com/quic/aimet/releases/download/
+
+
+:hideitem:`Other installation options`
+======================================
 
 .. toctree::
    :titlesonly:
-   :maxdepth: 3
+   :hidden:
+   :maxdepth: 2
 
-   Install in Host Machine <install_host>
-   Install in Docker Container <install_docker>
+   Manual install <install_host>
+   Docker install <install_docker>
