@@ -52,8 +52,9 @@ from aimet_common import quantsim
 from aimet_common import libquant_info
 from aimet_common.defs import QuantScheme, QuantizationDataType, EncodingType
 from aimet_common.quantsim_config.utils import get_path_for_per_channel_config
-from aimet_onnx.quantsim import QuantizationSimModel, load_encodings_to_sim, set_blockwise_quantization_for_weights, _apply_constraints, clamp_activation_encodings
-from aimet_onnx.qc_quantize_op import OpMode
+from aimet_onnx.quantsim import QuantizationSimModel, load_encodings_to_sim, set_blockwise_quantization_for_weights, _apply_constraints, clamp_activation_encodings, \
+    set_grouped_blockwise_quantization_for_weights
+from aimet_onnx.qc_quantize_op import OpMode, GroupedBlockQuantizeDequantize
 from aimet_onnx.utils import make_dummy_input
 from models.models_for_tests import SingleResidual
 from models import models_for_tests, test_models
@@ -1270,6 +1271,77 @@ class TestQuantSim:
             with open(os.path.join(tempdir, 'gather_model.encodings')) as json_file:
                 encoding_data = json.load(json_file)
                 assert 'gather_weight' not in encoding_data['activation_encodings'].keys()
+
+    @pytest.mark.parametrize("model, block_size", ((models_for_tests.single_residual_model(), 4),
+                                                   (test_models.linear_layer_model(), 64)),)
+    def test_low_power_blockwise_quantization(self, model, block_size, tmpdir):
+        dummy_input = make_dummy_input(model.model)
+        bq_layers = ("MatMul", "Conv", "Gemm")
+        bq_weights = set()
+        bitwidth = 4
+        decompressed_bw = 8
+
+        for node in model.graph().node:
+            if node.op_type in bq_layers:
+                bq_weights.add(node.input[1])
+
+        # Input shape is not compatible with block size
+        bq_weights.remove(model.graph().node[0].input[1])
+
+        sim = QuantizationSimModel(model, dummy_input, default_param_bw=16, default_activation_bw=16)
+        set_grouped_blockwise_quantization_for_weights(sim,
+                                                       ("MatMul", "Conv", "Gemm"),
+                                                       bitwidth,
+                                                       decompressed_bw,
+                                                       block_size,
+                                                       strict=False)
+
+        sim.compute_encodings(lambda session, _: session.run(None, dummy_input), None)
+        for name, quantizer in sim.qc_quantize_op_dict.items():
+            if not quantizer.enabled:
+                continue
+            if name in bq_weights:
+                assert isinstance(quantizer, GroupedBlockQuantizeDequantize)
+                assert quantizer.quant_info.usePerChannelMode
+                assert quantizer.quant_info.blockSize == block_size
+                assert len(quantizer.encodings) > 1
+            else:
+                assert quantizer.quant_info.blockSize == 0
+                assert len(quantizer.encodings) == 1
+
+        with set_encoding_version("1.0.0"):
+            sim.export(tmpdir, "tmp_model")
+
+        with open(os.path.join(tmpdir, "tmp_model.encodings")) as f:
+            encodings = json.load(f)
+
+        for enc in encodings["param_encodings"]:
+            if enc["name"] not in bq_weights:
+                assert enc["enc_type"] == EncodingType.PER_TENSOR.name
+            else:
+                assert enc["enc_type"] == EncodingType.LPBQ.name
+                assert enc["compressed_bw"] == bitwidth
+                assert enc["bw"] == decompressed_bw
+
+    def test_lpbq_strict(self):
+        model = models_for_tests.weight_matmul_model(in_features=16, out_features=32)
+        sim = QuantizationSimModel(model, default_activation_bw=16, default_param_bw=16, default_data_type=QuantizationDataType.float)
+        quantizers = set(sim.qc_quantize_op_dict.values())
+
+        with pytest.raises(ValueError):
+            set_grouped_blockwise_quantization_for_weights(sim, ("MatMul", "Gemm"), 4, 8, block_size=7, strict=True)
+        """
+        When: Call block size is incompatible with weight shape
+        Then: Original quantizer/quant_info should be unchanged from the call
+        """
+        set_grouped_blockwise_quantization_for_weights(sim, ("MatMul", "Gemm"), 4, 8, block_size=7, strict=False)
+        assert quantizers == set(sim.qc_quantize_op_dict.values())
+
+        for quantizer in sim.qc_quantize_op_dict.values():
+            assert quantizer.bitwidth == 16
+            assert not quantizer.quant_info.usePerChannelMode
+            assert quantizer.quant_info.blockSize == 0
+            assert not quantizer.quant_info.isIntDataType
 
 
 class TestEncodingPropagation:

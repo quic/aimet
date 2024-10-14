@@ -65,7 +65,7 @@ from aimet_onnx import utils
 from aimet_onnx.meta.operations import Op
 from aimet_onnx.meta.utils import get_op_given_param_name, get_param_shape_using_connected_graph
 from aimet_onnx.meta.connectedgraph import ConnectedGraph
-from aimet_onnx.qc_quantize_op import QcQuantizeOp, OpMode, TensorQuantizerParams
+from aimet_onnx.qc_quantize_op import QcQuantizeOp, OpMode, TensorQuantizerParams, GroupedBlockQuantizeDequantize
 from aimet_onnx.quantsim_config.quantsim_config import QuantSimConfigurator
 from aimet_onnx.utils import make_dummy_input, add_hook_to_get_activation, remove_activation_hooks
 
@@ -1191,6 +1191,62 @@ def set_blockwise_quantization_for_weights(sim: QuantizationSimModel,
                     weight_quantizer.set_bitwidth(bitwidth)
                     weight_quantizer.use_symmetric_encodings = symmetric
                     weight_quantizer.data_type = QuantizationDataType.int
+
+
+def set_grouped_blockwise_quantization_for_weights(sim: QuantizationSimModel,
+                                                   op_types: Union[str, Tuple],
+                                                   bitwidth: int,
+                                                   decompressed_bw: int,
+                                                   block_size: int,
+                                                   strict: bool = False):
+    """
+    Set weight parameter quantizers of modules to grouped blockwise quantization.
+
+    :param sim: Quantsim to set weight quantizers for
+    :param op_types: Operator types for which to enable grouped blockwise weight quantizaiton
+    :param bitwidth: Bitwidth for affine quantization
+    :param decompressed_bw: Decompressed bw for grouped block quantization
+    :param block_size: Block size for affine quantization. The block size will be applied to the weight's input features
+        dimension, while per-channel will be used for the weight's output features dimension
+
+    Examples:
+
+        >>> # Assume 'sim' is a QuantizationSimModel object
+        >>> # Sets of all Gemm, MatMul, and Conv weight quantizers to block_size 64 in the input_channels dimension:
+        >>> set_grouped_blockwise_quantization_for_weights(sim=sim,
+        ...                                                op_types=("Gemm", "MatMul", "Conv"),
+        ...                                                bitwidth=4,
+        ...                                                decompressed_bw=8,
+        ...                                                block_size=64)
+    """
+
+    if isinstance(op_types, str):
+        op_types = (op_types, )
+
+    for op in sim.connected_graph.ordered_ops:
+
+        if op.type in op_types:
+            _, _, param_quantizers = sim.get_op_quantizers(op)
+
+
+            if "weight" in param_quantizers.keys():
+                weight_quantizer: QcQuantizeOp = param_quantizers["weight"]
+
+                try:
+                    grouped_quantizer = GroupedBlockQuantizeDequantize(weight_quantizer.quant_info,
+                                                                       bitwidth,
+                                                                       decompressed_bw,
+                                                                       block_size,
+                                                                       weight_quantizer.quant_scheme,
+                                                                       OpMode.oneShotQuantizeDequantize,
+                                                                       weight_quantizer.tensor_quantizer_params)
+                except ValueError as e:
+                    if strict:
+                        raise e
+                else:
+                    for name, quantizer in sim.qc_quantize_op_dict.items():
+                        if quantizer is weight_quantizer:
+                            sim.qc_quantize_op_dict[name] = grouped_quantizer
 
 
 # pylint: disable=protected-access
