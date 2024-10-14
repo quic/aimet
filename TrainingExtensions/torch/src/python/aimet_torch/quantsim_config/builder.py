@@ -213,7 +213,7 @@ class LazyQuantizeWrapper(torch.nn.Module):
             quantized_module.input_quantizers[i] = quantizer
 
         for i, _ in list(enumerate(quantized_module.output_quantizers)):
-            q_idx = min(i, len(self.input_quantizers) - 1)
+            q_idx = min(i, len(self.output_quantizers) - 1)
             quantizer = self.output_quantizers[q_idx].realize()
             quantized_module.output_quantizers[i] = quantizer
 
