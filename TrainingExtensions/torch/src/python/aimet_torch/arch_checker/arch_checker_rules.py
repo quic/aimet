@@ -111,14 +111,29 @@ def _check_intermediate_padding(connected_graph: ConnectedGraph) -> List:
         If both 1st and 2nd conv have paddings, add conv2 to inter_pad_node_list.
         """
         if len(op_subset) == 4:
-            conv1, _, _, conv2 = op_subset
+            conv1, _, _, next_node = op_subset
         else:
-            conv1, _, conv2 = op_subset
+            conv1, _, next_node = op_subset
 
-        conv1_padding = sum(conv1.get_module().padding)
-        conv2_padding = sum(conv2.get_module().padding)
-        if conv1_padding and conv2_padding:
-            inter_pad_op_list.append(conv2)
+        previous_padding = sum(conv1.get_module().padding)
+
+        # Examine all following nodes, while ignore activations and break if meets none conv node.
+        while next_node:
+            if next_node.type in _support_conv_op_type:
+                current_padding = sum(next_node.get_module().padding)
+
+                if previous_padding and current_padding:
+                    inter_pad_op_list.append(next_node)
+
+                previous_padding = previous_padding or current_padding
+
+            next_outputs = next_node.output_ops
+
+            # Break if next_outputs has more than 1 output or not a activation/conv.
+            if len(next_outputs) != 1 or (next_outputs[0].type not in _support_activation_op_type and next_outputs[0].type not in _support_conv_op_type):
+                break
+            else:
+                next_node = next_outputs[0]
 
     _support_activation_op_type = ("Relu", "Tanh", "HardSwish")
     _support_conv_op_type = ("Conv", "Conv2D")
