@@ -380,6 +380,8 @@ def correct_bias(model: torch.nn.Module, quant_params: qsim.QuantParams,
         if module.bias is None:
             if isinstance(module, (torch.nn.Conv2d, torch.nn.ConvTranspose2d)):
                 output_size = module.out_channels
+            elif isinstance(module, (torch.nn.Conv1d, torch.nn.ConvTranspose1d)):
+                output_size = module.out_channels
             elif isinstance(module, torch.nn.Linear):
                 output_size = module.out_features
             module.bias = torch.nn.Parameter(torch.zeros(output_size))
