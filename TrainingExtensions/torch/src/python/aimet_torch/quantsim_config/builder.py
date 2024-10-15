@@ -42,7 +42,7 @@ import torch
 
 from aimet_common.defs import QuantScheme, QuantizationDataType, MAP_ROUND_MODE_TO_PYMO
 from aimet_common.utils import AimetLogger, log_with_error_and_assert_if_false
-from aimet_torch.utils import get_v1_quant_scheme_for_initialization
+from aimet_torch.utils import get_v1_quant_scheme_for_initialization, is_leaf_module
 from aimet_torch.qc_quantize_op import QcQuantizeOpMode, QcQuantizeWrapper, StaticGridQuantWrapper, tensor_quantizer_factory
 from aimet_torch.tensor_quantizer import TensorQuantizer, StaticGridPerChannelQuantizer
 import aimet_torch.fp_quantization as v1_fp_quantization
@@ -92,7 +92,19 @@ class LazyQuantizeWrapper(torch.nn.Module):
 
         # Create quantizer for each parameter and compute encodings
         self.param_quantizers = {}
-        for name, param in module_to_wrap.named_parameters():
+
+        from aimet_torch.v2.nn import BaseQuantizationMixin
+        if isinstance(module_to_wrap, BaseQuantizationMixin):
+            # NOTE: AIMET v2 qmodule always only quantizes the paramters that it directly owns
+            recurse = False
+        else:
+            # NOTE: This is only for backwards-compatibility with v1 quant wrapper
+            #       which sometimes tries to quantize not only the parameters it directly owns
+            #       but also all the parameters of its submodules in some edge cases
+            assert is_leaf_module(module_to_wrap)
+            recurse = True
+
+        for name, param in module_to_wrap.named_parameters(recurse=recurse):
             logger.debug("Adding quantizer for parameter: %s", name)
             self.param_quantizers[name] = LazyParamQuantizer(weight_bw,
                                                              rounding_mode,
@@ -117,8 +129,7 @@ class LazyQuantizeWrapper(torch.nn.Module):
         """
         Changes all parameter quantizers (if any) to per-channel mode.
         """
-        for param_name, _ in self._module_to_wrap.named_parameters():
-            param_quantizer = self.param_quantizers[param_name]
+        for param_name, param_quantizer in self.param_quantizers.items():
             channel_axis = 0
             if isinstance(self._module_to_wrap, (torch.nn.ConvTranspose1d,
                                                  torch.nn.ConvTranspose2d,
@@ -199,10 +210,8 @@ class LazyQuantizeWrapper(torch.nn.Module):
         from aimet_torch.v2.nn import QuantizationMixin
         from aimet_torch.v2.nn.fake_quant import _legacy_impl
 
-        if type(self._module_to_wrap) in QuantizationMixin.cls_to_qcls: # pylint: disable=unidiomatic-typecheck
-            quantized_module = QuantizationMixin.from_module(self._module_to_wrap)
-        else:
-            quantized_module = _legacy_impl.FakeQuantizationMixin.from_module(self._module_to_wrap)
+        assert isinstance(self._module_to_wrap, (QuantizationMixin, _legacy_impl.FakeQuantizationMixin))
+        quantized_module = self._module_to_wrap
 
         # For unused modules, quantsim assumes # inputs = # outputs = 1
         # If this is incorrect, propagate the configuration of the last input/output quantizers to the remaining

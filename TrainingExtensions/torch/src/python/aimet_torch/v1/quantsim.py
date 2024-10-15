@@ -315,15 +315,11 @@ class QuantizationSimModel:
         """
         for module_name, module_ref in model.named_children():
             if isinstance(module_ref, LazyQuantizeWrapper):
-                quantized_module = self._realize_quant_wrapper(module_ref)
+                quantized_module = module_ref.realize_v1_wrapper()
                 setattr(model, module_name, quantized_module)
 
             elif not utils.is_leaf_module(module_ref):
                 self._realize_quant_wrappers_in_model(module_ref)
-
-    @staticmethod
-    def _realize_quant_wrapper(module: torch.nn.Module) -> QcQuantizeWrapper:
-        return module.realize_v1_wrapper()
 
     def get_supported_kernels(self) -> Dict:
         """
