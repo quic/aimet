@@ -141,7 +141,7 @@ class EncodingMismatchInfo:
 class QuantizationSimModel:
     """ Creates a QuantizationSimModel model by adding quantization simulations ops to a given model """
 
-    # pylint: disable=too-many-arguments, too-many-locals, too-many-instance-attributes, too-many-statements
+    # pylint: disable=too-many-arguments, too-many-locals, too-many-instance-attributes
     def __init__(self,
                  model: ModelProto|str,
                  dummy_input: Dict[str, np.ndarray] = None,
