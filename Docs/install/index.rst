@@ -88,7 +88,7 @@ The following software versions are required for the quick install:
 
 Ensure that you have the LAPACK linear algebra package installed:
 
-.. code-block::
+.. code-block:: bash
 
     apt-get install liblapacke
 

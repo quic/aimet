@@ -161,7 +161,11 @@ https://github.com/quic/aimet/releases
 
 .. code-block:: bash
 
-    python3 -m pip install ${download_url}/${wheel_file_name}
+    # Install an compatible version of pip (since the latest version is NOT compatible with our wheel packages)
+    python3 -m pip install pip==24.0
+
+    # Install the wheel package
+    python3 -m pip install ${download_url}/${wheel_file_name} ${find_pkg_url_str}
 
 **1.4 Install the common Debian packages.**
 
@@ -376,10 +380,10 @@ Pillow-SIMD is an optimized version of the Pillow Python Imaging Library. It can
 
 .. _man-install-next:
 
+
 Next steps
 ==========
 
 See the :doc:`Quantization User Guide </user_guide/model_quantization>` for a discussion of how to use AIMET quantization.
 
 See the :doc:`Examples Documentation </user_guide/examples>` to try AIMET on example quantization and compression problems.
-

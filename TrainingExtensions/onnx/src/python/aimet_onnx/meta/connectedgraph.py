@@ -519,9 +519,10 @@ class ConnectedGraph(AimetCommonConnectedGraph):
                 del self._products[product.name]
             else:
                 for output in self.model.graph.output:
-                    if output.name in product.name:
+                    if product.name.startswith(output.name + '_to_') or \
+                        product.name.endswith('_to_' + output.name) or \
+                        product.name == output.name:
                         del self._products[product.name]
-                        self._create_link_for_output_product(output.name, branch_op.name)
 
         self._products[branch_op_product.name] = branch_op_product
 
