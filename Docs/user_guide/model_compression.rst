@@ -1,14 +1,13 @@
 .. _ug-model-compression:
 
-=======================
-AIMET Model Compression
-=======================
+#######################
+AIMET model compression
+#######################
 
 Overview
 ========
 
-AIMET provides a model compression library that can be used to reduce a model's MAC and memory costs with a minimal
-drop in accuracy. AIMET supports various compression schemes like Weight SVD, Spatial SVD and Channel Pruning.
+AIMET provides a model compression library that can reduce a model's multiply-and-accumulate (MAC) and memory costs with little loss of accuracy. AIMET supports various compression schemes like weight singular value decomposition (SVD), spatial SVD, and channel pruning.
 
 .. toctree::
    :titlesonly:
@@ -16,43 +15,48 @@ drop in accuracy. AIMET supports various compression schemes like Weight SVD, Sp
 
    Compression Guidebook <compression_feature_guidebook>
 
-Please see the :ref:`Compression Guidebook<ug-comp-guidebook>` - which includes some practical advice on using the compression features, and how to combine the features
+See the :ref:`Compression Guidebook<ug-comp-guidebook>` for a summary of how to use the compression features, and how to combine them.
 
 Use Case
 ========
-AIMET allows user to take a trained model and compress it to desired compression ratio which can be further fine-tuned and exported to a target.
-All of the compression schemes in AIMET use a two-step process - Compression ratio selection followed by model
-compression.
+
+AIMET can compress a trained model to a specified compression ratio. The model can then be further fine-tuned and exported to a target.
+
+All of the compression schemes in AIMET use a two-phase process: 
+
+1. Compression ratio selection 
+2. Model compression
 
 .. image:: ../images/compression_use_case.PNG
 
-The following sub-sections explain these steps in more detail.
+Both of these phases are explained below.
 
 Compression ratio selection
 ===========================
 .. toctree::
     :titlesonly:
     :hidden:
-
-    Greedy Compression Ratio Selection <greedy_compression_ratio_selection>
-
-- :ref:`Greedy Compression Ratio Selection<ug-greedy-comp-ratio-selection>`: During this phase, individual layers of the original model are analyzed to determine optimal compression ratios per layer. Currently AIMET supports the Greedy Compression Ratio Selection method.
-
-- Manual Compression Ratio Selection: As an alternative to AIMET automatically selecting optimal compression ratios per layer, the user has a choice to specify compression ratios manually per layer. The suggested procedure would be to use the Greedy Compression Ratio Selection method to get a nominal set of compression ratios first. And then use this as the starting point for manually changing compression ratios for one or more layers.
-
-To visualize various usage of the compression tool we can use:
-
-.. toctree::
-    :titlesonly:
     :maxdepth: 1
 
+    Greedy compression ratio selection <greedy_compression_ratio_selection>
     Visualization<visualization_compression>
 
-Model Compression
+In this phase, you select compression ratios automatically and/or manually. You can use AIMET Visualization to inspect these choices.
+
+Automatic compression ratio selection
+   AIMET computes optimal compression ratios for each layer, using the :ref:`Greedy Compression Ratio Selection<ug-greedy-comp-ratio-selection>` method for automatic compression.
+
+Manual compression ratio selection
+   You can manually specify compression ratios by layer. We suggest that you first use automatic compression ratio selection to get a baseline set of compression ratios, then manually change compression ratios for one or more layers.
+
+Visualization
+   Visualize compression as you apply these steps using :doc:`AIMET Visualization<visualization_compression>`.
+
+Model compression
 =================
 
-In this phase, AIMET will apply the compression ratios per layer to create a compressed model.
-Currently, AIMET supports the following model compression algorithms.
+In this phase, AIMET applies the compression ratios to each layer to create a compressed model.
+AIMET supports the following model compression algorithms:
 
 .. toctree::
     :titlesonly:
@@ -60,12 +64,12 @@ Currently, AIMET supports the following model compression algorithms.
 
     Weight SVD<weight_svd>
     Spatial SVD<spatial_svd>
-    Channel Pruning<channel_pruning>
+    Channel pruning<channel_pruning>
 
-Optional techniques to get better compression results
-=====================================================
+Optional techniques
+===================
 
-AIMET supports the following techniques that can be optionally used to get better compression results
+AIMET supports the following optional techniques that can improve compression results.
 
 - Rank-rounding
 - Per-layer fine-tuning
@@ -73,39 +77,47 @@ AIMET supports the following techniques that can be optionally used to get bette
 Rank Rounding
 -------------
 
-Often ML runtime-software like those for Embedded ML accelerators, will prefer the dimensions of layers like Conv2d or FC to be of a certain multiplicity. Matching the expected dimension size will result in optimal runtime for that layer. AIMET techniques like Weight/Spatial SVD or Channel Pruning, try to decompose layers or reduce layers - specifically in terms of output channels and input channels. The rank-rounding feature in AIMET will try and reduce layers to match a user-provided multiplicity. By default this feature is disabled. At present, AIMET allows the user to specify a multiplicity-factor for the entire model, not on a per-layer basis.
+AIMET techniques like weight SVD, spatial SVD, and channel pruning decompose or reduce input and output channel layers. 
 
-Users can make use of this feature to generate more optimal models for running on embedded targets.
+Certain types of layers (such as 2D convolution (Conv2D) or fully connected (FC)) in embedded ML accelerators are often optimized for certain multiplicities. Matching the expected multiplicity gives optimal runtime performance for that layer.
 
-Per-layer Fine-tuning
+The rank-rounding feature in AIMET tries to reduce layers to match a user-provided multiplicity. AIMET only allows you to specify a multiplicity factor for the entire model, not per layer. Use this feature to optimize models to run on embedded targets. By default the feature is disabled. 
+
+.. __per-layer-fine-tuning:
+
+Per-layer fine-tuning
 ---------------------
 
-Given a user-model and desired compression-ratio, the user may sometimes notice a sharp degradation in accuracy after compression but before fine-tuning. One technique that might help the overall compression of such scenarios, is using a feature called per-layer fine-tuning. When this feature is selected, AIMET invokes a user-provided fine-tuning function after compressing every layer that was selected for compression. This is done during the Model Compression phase in the diagram shown above.
+For a given user model and compression ratio, compression sometimes causes a sharp drop in accuracy before fine-tuning. Per-layer fine-tuning is a technique that can help maintain model accuracy for desired compression ratios. 
 
-Note: The user is responsible for choosing appropriate learning-rates and other training parameters for fine-tuning. Using this feature may require the user to carefully pick the learning rates and learning-rate-decay parameters to be used during fine-tuning.
+In this feature, AIMET invokes a user-provided fine-tuning function after compressing every layer that was selected for compression. This fine tuning is done during the model compression phase described above.
 
+.. admonition:: NOTE
+   
+   This feature may require careful selection of learning rates and learning-rate-decay parameters to be used during fine-tuning. You are responsible for choosing these training parameters.
 
 FAQs
 ====
-1. Which technique is the best technique to use for compression?
+
+1. Which is the best technique to use for compression?
 
    *We see best results when Spatial SVD is performed followed by Channel Pruning.*
 
-2. Can we combine the different techniques?
+2. Can I combine the different techniques?
 
-   *Yes, as stated in 1, different techniques can be combined together to get better accuracy. Compression can be combined with Post-training Quantization techniques as well to get a better model for target.*
+   *Yes, different techniques can be combined to get better accuracy. Compression can be also combined with post-training quantization techniques to get a better model for target.*
 
-3. How to take a model to target after compression?
+3. How do I take a model to target after compression?
 
-   *To take a model to target it needs to be first compressed using the above techniques and then it should be quantized and exported to target*
+   *First, compress the model using the techniques described above. Then, quantize the model and export it to target.*
 
 4. Greedy rank selection is very slow. Can something be done to speed it up?
 
-   *Greedy rank selection in itself is not time consuming. The time consuming part is creating the eval-score dictionary. For different experiments, eval-score dictionary can be generated once and then loaded into the searcher. Or, one can reduce the number of candidates over which the eval-score dictionary is created. But lesser the number of candidates, lesser the granularity. To strike a balance the value of 10 candidates was chosen.*
+   *The time-consuming part is creating the eval-score dictionary, not greedy rank selection itself. A single eval-score dictionary can be generated once and then loaded into the searcher for different experiments. Or, reduce the number of candidates over which the eval-score dictionary is created, but be aware that the fewer candidates, the worse the granularity. The default value of 10 candidates usually strikes a good balance.*
 
 5. Is per-layer fine tuning helpful?
 
-   *Per-layer fine tuning is an experimental technique. We have not observed major gains by using it. But one can try out if it works for their model. In practice, we have observed that the best combination is to do say 1 epoch of fine-tuning per-layer and then do say 10-15 epochs of fine-tuning for the entire compressed model at the end.*
+   *Per-layer fine tuning is an experimental technique. We have not observed major gains by using it. But, you can try it to see if it works for your model. In practice, the best results seem to come from doing one epoch of fine-tuning per layer, and then doing 10-15 epochs of fine-tuning for the entire compressed model at the end.*
 
 References
 ==========

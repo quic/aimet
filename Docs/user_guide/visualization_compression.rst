@@ -1,25 +1,26 @@
 ###################
-AIMET Visualization
+AIMET visualization
 ###################
 
 
 Overview
 ========
 
-AIMET Visualization adds analytical capability to the AIMET tool (which helps quantize and compress ML models) through visualization. It provide more detailed insights in to AIMET features, enabling you to analyze a model’s layers in terms of compressibility and also highlight potential issues when applying quantization. The tool also assists in displaying progress for computationally heavy tasks.
+AIMET visualization augments the analytical capabilities of the AIMET toolkit by providing more detailed insights into AIMET features. AIMET visualization enables you to analyze model layer compressibility, to highlight potential issues when applying quantization, and to display progress during computationally heavy tasks.
 
 Design
 ======
 
-Given a model, you can start a Bokeh server session and then invoke functions that produce visualizations to help analyze and understand the model before using AIMET features from quantization and compression.
+AIMET visualization starts a Bokeh server session on which you invoke functions based on your model. 
+
+The figure below illustrates the server arrangement:
 
 .. image:: ../images/vis_1.png
-
 
 Compression
 ===========
 
-Evaluation scores during compression are displayed in a table as they are computed and users can see the progress displayed while computing these scores. After Greedy Selection has run, the optimal compression ratios are also displayed in a graph
+You can view evaluation scores during compression in a table as they are computed. Progress is updated in real time. After :doc:`greedy selection<greedy_compression_ratio_selection>` has run, per-layer optimal compression ratios are displayed in a graph.
 
 .. image:: ../images/vis_4.png
 
@@ -30,34 +31,62 @@ Evaluation scores during compression are displayed in a table as they are comput
 .. image:: ../images/vis_7.png
 
 
-Starting a Bokeh Server Session:
-================================
-Start a bokeh server by typing this command: bokeh serve --allow-websocket-origin=<host name>:<port number> --port=<port number>
+Starting a Bokeh server session
+===============================
 
---allow-websocket-origin tells the Bokeh server which network addresses to listen on, again not typically needed for local It is not need just to view locally.
+Start a Bokeh server by typing this command: 
 
---port tells the Bokeh server what network port to listen on rather than the default port of 5006
+.. code-block::
 
+    bokeh serve --allow-websocket-origin=<host name>:<port number> --port=<port number>
 
-How to use the tool
-===================
+where:
 
+``--allow-websocket-origin``
+    specifies which network addresses to listen on. Required only for non-local viewing.
 
-**Model Compression**
+``--port``
+    specifies what network port to listen on. If not specified, 5006, the default, is used.
 
-#. Start a bokeh server by typing this command: bokeh serve --allow-websocket-origin=<host name>:<port number> --port=<port number>
-#. To visualize eval scores and compression ratios during execution time:
-    a) Input a visualization URL into the top level function: compress_model. This url is http://<host name>:<port number>/
-        i) For model compression, the visualization url is passed through compress_model. If no visualizations are necessary then the url has a default option for None.
-    b) Finally, go to the URL to see the visualizations.
-        i) The session-id here is: compression. So the URL would look something like this:
-        ii) http://<host name>:<port number>/?&bokeh-session-id=compression
-#. To visualize eval scores and compression ratios after execution:
-    a) Use API doc to decide which functions to use. They should be under "Model Compression."
-        i) First instantiate a VisualizeCompression instance by passing in a visualization URL. This url is http://<host name>:<port number>/
-    b) There are two functions:
-        i) display_eval_scores
-        ii) display_comp_ratio_plot
-    c) Finally, go to the URL to see the visualizations
-        i) The session-id here is: compression. So the URL would look something like this:
-        ii) http://<host name>:<port number>/?&bokeh-session-id=compression
+Visualizing compression ratios
+==============================
+
+**Prerequisites**
+
+Install the Bokeh server if necessary:
+
+.. code-block::
+    
+    pip install bokeh
+
+Start the Bokeh server as described above.
+
+**Procedure**
+
+At execution time:
+    To visualize eval scores and compression ratios at execution time:
+    
+    #. Include a visualization URL, ``http://<host name>:<port number>/``, in the top level function ``compress_model``.
+
+        If no visualizations are necessary, the URL defaults to ``None``.
+   
+    #. View the URL to see the visualizations:
+
+        ``http://<host name>:<port number>/?&bokeh-session-id=compression``
+
+        Note that the Bokeh session ID is "compression".
+    
+After execution:    
+    To visualize eval scores and compression ratios after execution:
+   
+    #. Decide which functions to use, one or both of:  ``display_eval_scores`` and ``display_comp_ratio_plot``.
+
+        See the "Model Compression" In the API documentation.
+
+    #. Instantiate a ``VisualizeCompression`` instance by passing in a visualization URL, ``http://<host name>:<port number>/``. 
+    
+    #. View the URL to see the visualizations:
+
+        ``http://<host name>:<port number>/?&bokeh-session-id=compression``
+
+        Note that the Bokeh session ID is "compression".

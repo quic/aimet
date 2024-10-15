@@ -1,48 +1,49 @@
-=====================
-AIMET Channel Pruning
-=====================
+#####################
+AIMET channel pruning
+#####################
 
-Channel Pruning is a model compression technique that reduces less-important input channels from layers in a given model. Currently AIMET supports Channel Pruning of Conv2d layers.
+Channel pruning (CP) is a model compression technique that removes less-important input channels from layers. AIMET supports channel pruning of 2D convolution (Conv2D) layers.
 
+Procedure
+=========
 
-
-Overall Procedure
-=================
-The following picture explains the different steps in Channel Pruning a given layer. These steps are repeated for all layers selected to be compressed in the order of their occurrence from the top of the model.
+The following figure illustrates the different steps in channel pruning a layer. These steps are repeated for all layers selected for compression in order of occurrence from the top of the model.
 
 .. image:: ../images/channel_pruning_1.png
 
-These individual steps are explained in more detail in the following sub-sections.
+The steps are explained below.
 
 
-
-Channel Selection
+Channel selection
 =================
-For a given layer and a given compression ratio Channel Selection analyzes the magnitude of each input channel (based on the kernel weights for that channel) and chooses the channels with the least magnitude to be pruned.
+
+For a layer and a specified compression ratio, channel selection analyzes the magnitude of each input channel based its kernel weights. It chooses the lowest-magnitude channels to be pruned.
 
 
-Winnowing
+Winnowing   
 =========
-Winnowing is used to remove input channels of weight matrix obtained from Channel Selection resulting in compressed tensors
+
+Winnowing is the process of removing the input channels identified in channel selection, resulting in compressed tensors:
 
 .. image:: ../images/cp_2.png
 
-
-Once one or more input channels for a layer are removed, then it means corresponding output channels of a upstream layer could also be removed to get further compression gains. Note that the presence of skip-connections or residuals sometimes prevents upstream layers from getting output-pruned.
+Once one or more input channels of a layer are removed, corresponding output channels of an upstream layer are also be removed to gain further compression. Skip-connections or residuals sometimes prevent upstream layers from being output-pruned.
 
 .. image:: ../images/cp_3.jpg
 
-For more details on winnowing, please see this
+For more on winnowing see :doc:`Winnowing<winnowing>`.
 
 .. toctree::
     :titlesonly:
     :maxdepth: 1
+    :hidden:
 
     Winnowing<winnowing>
 
 
-Weight Reconstruction
+Weight reconstruction
 =====================
-As a final step in Channel Pruning, AIMET will adjust the weight and bias parameters of a layer that was pruned in an attempt to try and match the outputs of that layer to closely match the outputs prior to pruning.This is done by collecting random samples of the output of the layer from the original model and the corresponding input samples from the pruned model for that layer. AIMET then performs linear regression to adjust the layer parameters.
+
+The final step in CP is to adjust the weight and bias parameters of a pruned layer to try and match pre-pruning output values. AIMET does this by performing linear regression on random samples of the layer's input from the pruned model against corresponding output from the original model.
 
 .. image:: ../images/cp_4.jpg
