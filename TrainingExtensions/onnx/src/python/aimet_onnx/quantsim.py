@@ -184,7 +184,7 @@ class QuantizationSimModel:
         #Load model in case it didn't simplify and was passed as path string
         self.model = onnx.load_model(model) if isinstance(model, str) else model
         if not isinstance(self.model, ONNXModel):
-            self.model = ONNXModel(model)
+            self.model = ONNXModel(self.model)
 
         if not dummy_input:
             dummy_input = make_dummy_input(self.model.model)
