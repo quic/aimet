@@ -205,7 +205,7 @@ class BaseQuantizationMixin(abc.ABC):
     @classmethod
     def implements(cls, module_cls):
         """
-        Decorator for registering quantized implementation of the given base class.
+        Decorator for registering quantized definition of the given base class.
         """
 
         def wrapper(quantized_cls):
