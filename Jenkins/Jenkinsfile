@@ -89,10 +89,10 @@ pipeline {
                                     }
                                     if ("${env.QCInternalValidation}" == "true") {
                                         withCredentials([usernameColonPassword(credentialsId: 'neoci-pat', variable: 'USERPASS')]) {
-                                            sh "AIMET_VARIANT=\"tf-gpu\" AIMET_PREBUILT_DOCKER_IMAGE_URL=\"${env.AIMET_PREBUILT_DOCKER_IMAGE_URL}\" PREBUILT_DOCKER_IMAGE_URL=\"${params.PREBUILT_DOCKER_IMAGE_URL}\" bash -l -c \"cd ${REPO_NAME} && ${env.DEPENDENCY_DATA_PATH}/commit_check/commit-checks.sh -e AIMET_VARIANT ${using_linaro} AIMET_PREBUILT_DOCKER_IMAGE_URL PREBUILT_DOCKER_IMAGE_URL\""
+                                            sh "AIMET_VARIANT=\"tf-gpu\" bash -l -c \"cd ${REPO_NAME} && ${env.DEPENDENCY_DATA_PATH}/commit_check/commit-checks.sh -e AIMET_VARIANT ${using_linaro}\""
                                         }
                                     } else {
-                                        sh "AIMET_VARIANT=\"tf-gpu\" AIMET_PREBUILT_DOCKER_IMAGE_URL=\"${env.AIMET_PREBUILT_DOCKER_IMAGE_URL}\" PREBUILT_DOCKER_IMAGE_URL=\"${params.PREBUILT_DOCKER_IMAGE_URL}\" bash -l -c \"cd ${REPO_NAME} && ${env.DEPENDENCY_DATA_PATH}/commit_check/commit-checks.sh -e AIMET_VARIANT ${using_linaro} AIMET_PREBUILT_DOCKER_IMAGE_URL PREBUILT_DOCKER_IMAGE_URL\""
+                                        sh "AIMET_VARIANT=\"tf-gpu\" bash -l -c \"cd ${REPO_NAME} && ${env.DEPENDENCY_DATA_PATH}/commit_check/commit-checks.sh -e AIMET_VARIANT ${using_linaro}"
                                     }
                                 }
                                 sh "bash -l -c \"rm -rf commit_checks_repo\""
@@ -514,7 +514,7 @@ def runStage(aimet_variant, options) {
             using_linaro=""
         }
         sh """
-            AIMET_VARIANT=${aimet_variant} AIMET_PREBUILT_DOCKER_IMAGE_URL=${env.AIMET_PREBUILT_DOCKER_IMAGE_URL} PREBUILT_DOCKER_IMAGE_URL=${params.PREBUILT_DOCKER_IMAGE_URL} bash -l -c "cd ${REPO_NAME} && ./buildntest.sh -e AIMET_VARIANT ${options} ${using_linaro} AIMET_PREBUILT_DOCKER_IMAGE_URL PREBUILT_DOCKER_IMAGE_URL"
+            AIMET_VARIANT=${aimet_variant} bash -l -c "cd ${REPO_NAME} && ./buildntest.sh -e AIMET_VARIANT ${options} ${using_linaro}"
         """
     }
 }
