@@ -44,6 +44,7 @@ from aimet_common.libpymo import TensorQuantizerOpMode
 from aimet_common.defs import QuantScheme, MAP_QUANT_SCHEME_TO_PYMO, MAP_ROUND_MODE_TO_PYMO, QuantizationDataType, EncodingType
 from aimet_common import libquant_info
 from aimet_common.utils import deprecated, AimetLogger
+from aimet_common.quantsim import calculate_delta_offset
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
 
@@ -544,13 +545,22 @@ class QcQuantizeOp:
         :return:
         """
         encodings = self.get_encodings()
+
         if (not encodings) or (not self.enabled) or self._is_encoding_frozen:
             return
-        qmin = encodings[0].min
-        qmax = encodings[0].max
-        if qmin < -clamp_val or qmax > clamp_val:
-            tensor = np.clip(np.array([qmin, qmax]), -clamp_val, clamp_val)
-            self.reset_encoding_stats()
-            self.update_encoding_stats(tensor)
-            self.compute_encodings()
-            logger.info("Clamped tensor %s. Before: %f, %f | After: %f, %f", tensor_name, qmin, qmax, np.min(tensor), np.max(tensor))
+
+        for channel, encoding in enumerate(encodings):
+            qmin = encoding.min
+            qmax = encoding.max
+            if qmin < -clamp_val or qmax > clamp_val:
+                tensor = np.clip(np.array([qmin, qmax]), -clamp_val, clamp_val)
+                delta, offset = calculate_delta_offset(min_val=tensor[0], max_val=tensor[1], bitwidth=self.bitwidth,
+                                                       use_symmetric_encodings=self.use_symmetric_encodings,
+                                                       use_strict_symmetric=self.use_strict_symmetric)
+                encoding.min = tensor[0]
+                encoding.max = tensor[1]
+                encoding.delta = delta
+                encoding.offset = offset
+
+                logger.debug("Clamped channel %d of tensor %s. Before: %f, %f | After: %f, %f", channel, tensor_name, qmin,
+                             qmax, np.min(tensor), np.max(tensor))
