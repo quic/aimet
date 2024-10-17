@@ -19,7 +19,6 @@ pipeline {
 
         PROJECT_ROOT    = "${workspace}/${REPO_NAME}"
         PROJECT_NAME    = "${params.PROJECT_NAME}"
-        PROJECT_BRANCH  = "${params.PROJECT_BRANCH}"
         WORKSPACE_ROOT  = "${workspace}"
         XUNIT_XSL_FILE  = "${PROJECT_ROOT}/Jenkins/to-junit.xsl"
     }
@@ -70,10 +69,10 @@ pipeline {
                     }
                     if ("${env.QCInternalValidation}" == "true") {
                         withCredentials([usernameColonPassword(credentialsId: 'neoci-pat', variable: 'USERPASS')]) {
-                            sh "AIMET_VARIANT=\"tf-cpu\" bash -l -c \"cd ${REPO_NAME} && ${env.DEPENDENCY_DATA_PATH}/commit_check/commit-checks.sh -e AIMET_VARIANT ${using_linaro} ${env.PREBUILT_DOCKER_IMAGE_URL}\""
+                            sh "AIMET_VARIANT=\"tf-cpu\" bash -l -c \"cd ${REPO_NAME} && ${env.DEPENDENCY_DATA_PATH}/commit_check/commit-checks.sh -e AIMET_VARIANT ${using_linaro}\""
                         }
                     } else {
-                        sh "AIMET_VARIANT=\"tf-cpu\" bash -l -c \"cd ${REPO_NAME} && ${env.DEPENDENCY_DATA_PATH}/commit_check/commit-checks.sh -e AIMET_VARIANT ${using_linaro} ${env.PREBUILT_DOCKER_IMAGE_URL}\""
+                        sh "AIMET_VARIANT=\"tf-cpu\" bash -l -c \"cd ${REPO_NAME} && ${env.DEPENDENCY_DATA_PATH}/commit_check/commit-checks.sh -e AIMET_VARIANT ${using_linaro}\""
                     }
                 }
                 sh "bash -l -c \"rm -rf commit_checks_repo\""
@@ -404,7 +403,7 @@ def runStage(aimet_variant, options) {
             using_linaro=""
         }
         sh """
-            AIMET_VARIANT=${aimet_variant} bash -l -c "cd ${REPO_NAME} && ./buildntest.sh -e AIMET_VARIANT ${options} ${using_linaro} ${env.PREBUILT_DOCKER_IMAGE_URL}"
+            AIMET_VARIANT=${aimet_variant} bash -l -c "cd ${REPO_NAME} && ./buildntest.sh -e AIMET_VARIANT ${options} ${using_linaro}"
         """
     }
 }
@@ -418,10 +417,10 @@ def callAimetExtra(target_branch) {
         }
     if (target_branch != "develop") {
         echo "Running AIMET additional stages on ${CHANGE_TARGET} branch ..."
-        build job: "AIMET-Extra", parameters: [string(name: 'AIMET_GIT_COMMIT', value: "${CHANGE_BRANCH}"), string(name: 'PROJECT_BRANCH', value: target_branch), string(name: 'USE_LINARO', value: "${using_linaro}")]
+        build job: "AIMET-Extra", parameters: [string(name: 'AIMET_GIT_COMMIT', value: "${CHANGE_BRANCH}"), string(name: 'PROJECT_BRANCH', value: target_branch), string(name: 'USE_LINARO', value: "${using_linaro}"), string(name: 'PREBUILT_DOCKER_IMAGE_URL', value: "${params.PREBUILT_DOCKER_IMAGE_URL}")]
     }    else {
         echo "Running AIMET additional stages on develop branch ..."
-        build job: "AIMET-Extra", parameters: [string(name: 'AIMET_GIT_COMMIT', value: "${CHANGE_BRANCH}"), string(name: 'USE_LINARO', value: "${using_linaro}")]
+        build job: "AIMET-Extra", parameters: [string(name: 'AIMET_GIT_COMMIT', value: "${CHANGE_BRANCH}"), string(name: 'USE_LINARO', value: "${using_linaro}"), string(name: 'PREBUILT_DOCKER_IMAGE_URL', value: "${params.PREBUILT_DOCKER_IMAGE_URL}")]
     }
 }
 
