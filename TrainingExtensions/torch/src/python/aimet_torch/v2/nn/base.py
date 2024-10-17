@@ -224,18 +224,6 @@ class BaseQuantizationMixin(abc.ABC):
 
         :param module: Floating point module to quantize
         :return: Quantized version of the original module
-
-        Example:
-
-            >>> linear = torch.nn.linear(10, 10)
-            >>> quantized_linear = FakeQuantizationMixin.from_module(linear)
-            >>> print(quantized_linear.weight is linear.weight)
-            True
-            >>> print(quantized_linear.param_quantizers)
-            ModuleDict(
-                (weight): None
-                (bias): None
-            )
         """
         # pylint: disable=protected-access
         module_cls = type(module)

@@ -102,9 +102,8 @@ API Reference
 
    ../torch_docs/quantized_modules
    ../torch_docs/quantizer
-   ../torch_docs/encoding_analyzer
-   ../torch_docs/api/nn.fake_quantization_mixin
    ../torch_docs/api/nn.quantization_mixin
    ../torch_docs/api/quantization/affine/index
    ../torch_docs/api/quantization/float/index
+   ../torch_docs/encoding_analyzer
    ../torch_docs/api/visualization_tools

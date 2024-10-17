@@ -2,39 +2,27 @@
 
 .. currentmodule:: aimet_torch.v2.nn
 
-.. warning::
-    This feature is under heavy development and API changes may occur without notice in future versions.
-
 =================
 Quantized Modules
 =================
 
-To simulate the effects of running networks at a reduced bitwidth, AIMET provides quantized versions of
-standard torch.nn.Modules. These quantized modules serve as drop-in replacements for their PyTorch counterparts, but can
+To simulate the effects of running networks at a reduced bitwidth, AIMET introduced `quantized modules`, the extension of
+standard torch.nn.Modules with some extra capabilities for quantization.
+These quantized modules serve as drop-in replacements for their PyTorch counterparts, but can
 hold input, output, and parameter :ref:`quantizers<api-torch-quantizers>` to perform quantization operations during the
 module's forward pass and compute quantization encodings.
 
-A quantized module inherits both from an AIMET-defined quantization mixin type as well as a native pytorch `nn.Module` type. The
-exact behavior and capabilities of the quantized module are determined by which type of quantization mixin it inherits from.
+More specifically, a quantized module inherits both from :ref:`QuantizationMixin<api-torch-quantization-mixin-summary>` and a native torch.nn.Module type,
+typically with "Quantized-" prefix prepended to the original class name, such as QuantizedConv2d for torch.nn.Conv2d or QuantizedSoftmax for torch.nn.Softmax.
+For more detailed API reference of QuantizationMixin class, see :ref:`QuantizationMixin API reference<api-torch-quantization-mixin>`.
+For the full list of all built-in quantized modules in AIMET, see :ref:`api-quantized-module-class-table`
 
-AIMET defines two types of quantization mixin:
-
-    - :ref:`FakeQuantizationMixin<api-torch-fake-quantization-mixin>`: Simulates quantization by performing quantize-dequantize
-      operations on tensors and calling into native pytorch floating-point operations
-
-    - :ref:`QuantizationMixin<api-torch-quantization-mixin>`: Allows the user to register a custom kernel to perform
-      a quantized forward pass and dequantizes the output. If no kernel is registered, the module will perform fake-quantization.
-
-The functionality and state of a :ref:`QuantizationMixin<api-torch-quantization-mixin>` is a superset of that of a :ref:`FakeQuantizationMixin<api-torch-fake-quantization-mixin>`, meaning that
-if one does not register a custom kernel, a :ref:`QuantizationMixin<api-torch-quantization-mixin>`-derived module behaves
-exactly the same as a :ref:`FakeQuantizationMixin<api-torch-fake-quantization-mixin>`-derived module. AIMET provides
-extensive coverage of :ref:`FakeQuantizationMixin<api-torch-fake-quantization-mixin>` for ``torch.nn.Module`` layer types, and more limited coverage for
-:ref:`QuantizationMixin<api-torch-quantization-mixin>` layers. See the :ref:`table below<api-quantized-module-class-table>` for a full list of module coverage.
 
 Top-level API
 =============
 
-.. autoclass:: aimet_torch.v2.nn.base.BaseQuantizationMixin
+.. _api-torch-quantization-mixin-summary:
+.. autoclass:: aimet_torch.v2.nn.QuantizationMixin
    :members: __quant_init__, forward, compute_encodings
 
 Configuration
@@ -100,217 +88,216 @@ Example:
     True
 
 
-Quantized Module Classes
-========================
 .. _api-quantized-module-class-table:
 
-============================================= ============================================= ============================
-nn.Module                                     FakeQuantizationMixin                         QuantizationMixin
-============================================= ============================================= ============================
-torch.nn.AdaptiveAvgPool1d                    FakeQuantizedAdaptiveAvgPool1d
-torch.nn.AdaptiveAvgPool2d                    FakeQuantizedAdaptiveAvgPool2d
-torch.nn.AdaptiveAvgPool3d                    FakeQuantizedAdaptiveAvgPool3d
-torch.nn.AdaptiveMaxPool1d                    FakeQuantizedAdaptiveMaxPool1d
-torch.nn.AdaptiveMaxPool2d                    FakeQuantizedAdaptiveMaxPool2d
-torch.nn.AdaptiveMaxPool3d                    FakeQuantizedAdaptiveMaxPool3d
-torch.nn.AlphaDropout                         FakeQuantizedAlphaDropout
-torch.nn.AvgPool1d                            FakeQuantizedAvgPool1d
-torch.nn.AvgPool2d                            FakeQuantizedAvgPool2d
-torch.nn.AvgPool3d                            FakeQuantizedAvgPool3d
-torch.nn.BatchNorm1d                          FakeQuantizedBatchNorm1d
-torch.nn.BatchNorm2d                          FakeQuantizedBatchNorm2d
-torch.nn.BatchNorm3d                          FakeQuantizedBatchNorm3d
-torch.nn.CELU                                 FakeQuantizedCELU
-torch.nn.ChannelShuffle                       FakeQuantizedChannelShuffle
-torch.nn.ConstantPad1d                        FakeQuantizedConstantPad1d
-torch.nn.ConstantPad2d                        FakeQuantizedConstantPad2d
-torch.nn.ConstantPad3d                        FakeQuantizedConstantPad3d
-torch.nn.Conv1d                               FakeQuantizedConv1d                           QuantizedConv1d
-torch.nn.Conv2d                               FakeQuantizedConv2d                           QuantizedConv2d
-torch.nn.Conv3d                               FakeQuantizedConv3d                           QuantizedConv3d
-torch.nn.ConvTranspose1d                      FakeQuantizedConvTranspose1d
-torch.nn.ConvTranspose2d                      FakeQuantizedConvTranspose2d
-torch.nn.ConvTranspose3d                      FakeQuantizedConvTranspose3d
-torch.nn.CrossMapLRN2d                        FakeQuantizedCrossMapLRN2d
-torch.nn.Dropout                              FakeQuantizedDropout
-torch.nn.Dropout2d                            FakeQuantizedDropout2d
-torch.nn.Dropout3d                            FakeQuantizedDropout3d
-torch.nn.ELU                                  FakeQuantizedELU
-torch.nn.FeatureAlphaDropout                  FakeQuantizedFeatureAlphaDropout
-torch.nn.Flatten                              FakeQuantizedFlatten
-torch.nn.Fold                                 FakeQuantizedFold
-torch.nn.FractionalMaxPool2d                  FakeQuantizedFractionalMaxPool2d
-torch.nn.FractionalMaxPool3d                  FakeQuantizedFractionalMaxPool3d
-torch.nn.GELU                                 FakeQuantizedGELU                             QuantizedGELU
-torch.nn.GLU                                  FakeQuantizedGLU
-torch.nn.GroupNorm                            FakeQuantizedGroupNorm
-torch.nn.Hardshrink                           FakeQuantizedHardshrink
-torch.nn.Hardsigmoid                          FakeQuantizedHardsigmoid
-torch.nn.Hardswish                            FakeQuantizedHardswish
-torch.nn.Hardtanh                             FakeQuantizedHardtanh
-torch.nn.Identity                             FakeQuantizedIdentity
-torch.nn.InstanceNorm1d                       FakeQuantizedInstanceNorm1d
-torch.nn.InstanceNorm2d                       FakeQuantizedInstanceNorm2d
-torch.nn.InstanceNorm3d                       FakeQuantizedInstanceNorm3d
-torch.nn.LPPool1d                             FakeQuantizedLPPool1d
-torch.nn.LPPool2d                             FakeQuantizedLPPool2d
-torch.nn.LayerNorm                            FakeQuantizedLayerNorm                        QuantizedLayerNorm
-torch.nn.LeakyReLU                            FakeQuantizedLeakyReLU
-torch.nn.Linear                               FakeQuantizedLinear                           QuantizedLinear
-torch.nn.LocalResponseNorm                    FakeQuantizedLocalResponseNorm
-torch.nn.LogSigmoid                           FakeQuantizedLogSigmoid
-torch.nn.LogSoftmax                           FakeQuantizedLogSoftmax
-torch.nn.MaxPool1d                            FakeQuantizedMaxPool1d
-torch.nn.MaxPool2d                            FakeQuantizedMaxPool2d
-torch.nn.MaxPool3d                            FakeQuantizedMaxPool3d
-torch.nn.MaxUnpool1d                          FakeQuantizedMaxUnpool1d
-torch.nn.MaxUnpool2d                          FakeQuantizedMaxUnpool2d
-torch.nn.MaxUnpool3d                          FakeQuantizedMaxUnpool3d
-torch.nn.Mish                                 FakeQuantizedMish
-torch.nn.PReLU                                FakeQuantizedPReLU
-torch.nn.PixelShuffle                         FakeQuantizedPixelShuffle
-torch.nn.PixelUnshuffle                       FakeQuantizedPixelUnshuffle
-torch.nn.RReLU                                FakeQuantizedRReLU
-torch.nn.ReLU                                 FakeQuantizedReLU
-torch.nn.ReLU6                                FakeQuantizedReLU6
-torch.nn.ReflectionPad1d                      FakeQuantizedReflectionPad1d
-torch.nn.ReflectionPad2d                      FakeQuantizedReflectionPad2d
-torch.nn.ReplicationPad1d                     FakeQuantizedReplicationPad1d
-torch.nn.ReplicationPad2d                     FakeQuantizedReplicationPad2d
-torch.nn.ReplicationPad3d                     FakeQuantizedReplicationPad3d
-torch.nn.SELU                                 FakeQuantizedSELU
-torch.nn.SiLU                                 FakeQuantizedSiLU
-torch.nn.Sigmoid                              FakeQuantizedSigmoid                          QuantizedSigmoid
-torch.nn.Softmax                              FakeQuantizedSoftmax                          QuantizedSoftmax
-torch.nn.Softmax2d                            FakeQuantizedSoftmax2d
-torch.nn.Softmin                              FakeQuantizedSoftmin
-torch.nn.Softplus                             FakeQuantizedSoftplus
-torch.nn.Softshrink                           FakeQuantizedSoftshrink
-torch.nn.Softsign                             FakeQuantizedSoftsign
-torch.nn.SyncBatchNorm                        FakeQuantizedSyncBatchNorm
-torch.nn.Tanh                                 FakeQuantizedTanh
-torch.nn.Tanhshrink                           FakeQuantizedTanhshrink
-torch.nn.Threshold                            FakeQuantizedThreshold
-torch.nn.Unflatten                            FakeQuantizedUnflatten
-torch.nn.Unfold                               FakeQuantizedUnfold
-torch.nn.Upsample                             FakeQuantizedUpsample
-torch.nn.UpsamplingBilinear2d                 FakeQuantizedUpsamplingBilinear2d
-torch.nn.UpsamplingNearest2d                  FakeQuantizedUpsamplingNearest2d
-torch.nn.ZeroPad2d                            FakeQuantizedZeroPad2d
-torch.nn.BCELoss                              FakeQuantizedBCELoss
-torch.nn.BCEWithLogitsLoss                    FakeQuantizedBCEWithLogitsLoss
-torch.nn.Bilinear                             FakeQuantizedBilinear
-torch.nn.CTCLoss                              FakeQuantizedCTCLoss
-torch.nn.CosineSimilarity                     FakeQuantizedCosineSimilarity
-torch.nn.CrossEntropyLoss                     FakeQuantizedCrossEntropyLoss
-torch.nn.HingeEmbeddingLoss                   FakeQuantizedHingeEmbeddingLoss
-torch.nn.HuberLoss                            FakeQuantizedHuberLoss
-torch.nn.KLDivLoss                            FakeQuantizedKLDivLoss
-torch.nn.L1Loss                               FakeQuantizedL1Loss
-torch.nn.MSELoss                              FakeQuantizedMSELoss
-torch.nn.MultiLabelMarginLoss                 FakeQuantizedMultiLabelMarginLoss
-torch.nn.MultiLabelSoftMarginLoss             FakeQuantizedMultiLabelSoftMarginLoss
-torch.nn.MultiMarginLoss                      FakeQuantizedMultiMarginLoss
-torch.nn.NLLLoss                              FakeQuantizedNLLLoss
-torch.nn.NLLLoss2d                            FakeQuantizedNLLLoss2d
-torch.nn.PairwiseDistance                     FakeQuantizedPairwiseDistance
-torch.nn.PoissonNLLLoss                       FakeQuantizedPoissonNLLLoss
-torch.nn.SmoothL1Loss                         FakeQuantizedSmoothL1Loss
-torch.nn.SoftMarginLoss                       FakeQuantizedSoftMarginLoss
-torch.nn.CosineEmbeddingLoss                  FakeQuantizedCosineEmbeddingLoss
-torch.nn.GaussianNLLLoss                      FakeQuantizedGaussianNLLLoss
-torch.nn.MarginRankingLoss                    FakeQuantizedMarginRankingLoss
-torch.nn.TripletMarginLoss                    FakeQuantizedTripletMarginLoss
-torch.nn.TripletMarginWithDistanceLoss        FakeQuantizedTripletMarginWithDistanceLoss
-torch.nn.Embedding                            FakeQuantizedEmbedding
-torch.nn.EmbeddingBag                         FakeQuantizedEmbeddingBag
-torch.nn.GRU                                  FakeQuantizedGRU
-torch.nn.RNN                                  FakeQuantizedRNN
-torch.nn.GRUCell                              FakeQuantizedGRUCell
-torch.nn.RNNCell                              FakeQuantizedRNNCell
-torch.nn.LSTM                                 FakeQuantizedLSTM
-torch.nn.LSTMCell                             FakeQuantizedLSTMCell
-torch.nn.AdaptiveLogSoftmaxWithLoss           FakeQuantizedAdaptiveLogSoftmaxWithLoss
-aimet_torch.v2.nn.custom.ChannelShuffle       FakeQuantizedChannelShuffle
-aimet_torch.v2.nn.custom.MaxPool2d            FakeQuantizedMaxPool2d
-aimet_torch.v2.nn.custom.AdaptiveAvgPool2d    FakeQuantizedAdaptiveAvgPool2d
-aimet_torch.v2.nn.custom.AvgPool2d            FakeQuantizedAvgPool2d
-aimet_torch.v2.nn.custom.Cast                 FakeQuantizedCast
-aimet_torch.v2.nn.custom.DepthToSpaceDCRMode  FakeQuantizedDepthToSpaceDCRMode
-aimet_torch.v2.nn.custom.OneHot               FakeQuantizedOneHot
-aimet_torch.v2.nn.custom.Exponential          FakeQuantizedExponential
-aimet_torch.v2.nn.custom.Erf                  FakeQuantizedErf
-aimet_torch.v2.nn.custom.Sqrt                 FakeQuantizedSqrt
-aimet_torch.v2.nn.custom.Log                  FakeQuantizedLog
-aimet_torch.v2.nn.custom.Abs                  FakeQuantizedAbs
-aimet_torch.v2.nn.custom.Neg                  FakeQuantizedNeg
-aimet_torch.v2.nn.custom.ElementwiseCeil      FakeQuantizedElementwiseCeil
-aimet_torch.v2.nn.custom.ElementwiseFloor     FakeQuantizedElementwiseFloor
-aimet_torch.v2.nn.custom.Sin                  FakeQuantizedSin
-aimet_torch.v2.nn.custom.Cos                  FakeQuantizedCos
-aimet_torch.v2.nn.custom.Asin                 FakeQuantizedAsin
-aimet_torch.v2.nn.custom.Atan                 FakeQuantizedAtan
-aimet_torch.v2.nn.custom.Round                FakeQuantizedRound
-aimet_torch.v2.nn.custom.LogicalNot           FakeQuantizedLogicalNot
-aimet_torch.v2.nn.custom.NonZero              FakeQuantizedNonZero
-aimet_torch.v2.nn.custom.ElementwiseUnarySign FakeQuantizedElementwiseUnarySign
-aimet_torch.v2.nn.custom.RSqrt                FakeQuantizedRSqrt
-aimet_torch.v2.nn.custom.Square               FakeQuantizedSquare
-aimet_torch.v2.nn.custom.Mean                 FakeQuantizedMean
-aimet_torch.v2.nn.custom.Sum                  FakeQuantizedSum
-aimet_torch.v2.nn.custom.Prod                 FakeQuantizedProd
-aimet_torch.v2.nn.custom.Argmin               FakeQuantizedArgmin
-aimet_torch.v2.nn.custom.Argmax               FakeQuantizedArgmax
-aimet_torch.v2.nn.custom.Gather               FakeQuantizedGather
-aimet_torch.v2.nn.custom.Reshape              FakeQuantizedReshape
-aimet_torch.v2.nn.custom.RoiAlign             FakeQuantizedRoiAlign
-aimet_torch.v2.nn.custom.Permute              FakeQuantizedPermute
-aimet_torch.v2.nn.custom.IndexSelect          FakeQuantizedIndexSelect
-aimet_torch.v2.nn.custom.TopK                 FakeQuantizedTopK
-aimet_torch.v2.nn.custom.Tile                 FakeQuantizedTile
-aimet_torch.v2.nn.custom.Norm                 FakeQuantizedNorm
-aimet_torch.v2.nn.custom.CumSum               FakeQuantizedCumSum
-aimet_torch.v2.nn.custom.Interpolate          FakeQuantizedInterpolate
-aimet_torch.v2.nn.custom.Normalize            FakeQuantizedNormalize
-aimet_torch.v2.nn.custom.Pad                  FakeQuantizedPad
-aimet_torch.v2.nn.custom.Shape                FakeQuantizedShape
-aimet_torch.v2.nn.custom.Expand               FakeQuantizedExpand
-aimet_torch.v2.nn.custom.StridedSlice         FakeQuantizedStridedSlice
-aimet_torch.v2.nn.custom.MatMul               FakeQuantizedMatMul
-aimet_torch.v2.nn.custom.Add                  FakeQuantizedAdd                              QuantizedAdd
-aimet_torch.v2.nn.custom.Multiply             FakeQuantizedMultiply                         QuantizedMultiply
-aimet_torch.v2.nn.custom.Subtract             FakeQuantizedSubtract                         QuantizedSubtract
-aimet_torch.v2.nn.custom.Divide               FakeQuantizedDivide
-aimet_torch.v2.nn.custom.FloorDivide          FakeQuantizedFloorDivide
-aimet_torch.v2.nn.custom.Greater              FakeQuantizedGreater
-aimet_torch.v2.nn.custom.Less                 FakeQuantizedLess
-aimet_torch.v2.nn.custom.GreaterEqual         FakeQuantizedGreaterEqual
-aimet_torch.v2.nn.custom.LessEqual            FakeQuantizedLessEqual
-aimet_torch.v2.nn.custom.NotEqual             FakeQuantizedNotEqual
-aimet_torch.v2.nn.custom.Equal                FakeQuantizedEqual
-aimet_torch.v2.nn.custom.Remainder            FakeQuantizedRemainder
-aimet_torch.v2.nn.custom.Fmod                 FakeQuantizedFmod
-aimet_torch.v2.nn.custom.Pow                  FakeQuantizedPow
-aimet_torch.v2.nn.custom.CustomSiLU           FakeQuantizedCustomSiLU
-aimet_torch.v2.nn.custom.Maximum              FakeQuantizedMaximum
-aimet_torch.v2.nn.custom.Max                  FakeQuantizedMax
-aimet_torch.v2.nn.custom.Minimum              FakeQuantizedMinimum
-aimet_torch.v2.nn.custom.Min                  FakeQuantizedMin
-aimet_torch.v2.nn.custom.Bmm                  FakeQuantizedBmm
-aimet_torch.v2.nn.custom.LogicalOr            FakeQuantizedLogicalOr
-aimet_torch.v2.nn.custom.LogicalAnd           FakeQuantizedLogicalAnd
-aimet_torch.v2.nn.custom.CustomGather         FakeQuantizedCustomGather
-aimet_torch.v2.nn.custom.GatherNd             FakeQuantizedGatherNd
-aimet_torch.v2.nn.custom.Baddbmm              FakeQuantizedBaddbmm
-aimet_torch.v2.nn.custom.Addmm                FakeQuantizedAddmm
-aimet_torch.v2.nn.custom.ScatterND            FakeQuantizedScatterND
-aimet_torch.v2.nn.custom.DynamicConv2d        FakeQuantizedDynamicConv2d
-aimet_torch.v2.nn.custom.ScatterElements      FakeQuantizedScatterElements
-aimet_torch.v2.nn.custom.BatchNorm            FakeQuantizedBatchNorm
-aimet_torch.v2.nn.custom.GroupNorm            FakeQuantizedAimetGroupNorm
-aimet_torch.v2.nn.custom.NonMaxSuppression    FakeQuantizedNonMaxSuppression
-aimet_torch.v2.nn.custom.Split                FakeQuantizedSplit
-aimet_torch.v2.nn.custom.Concat               FakeQuantizedConcat
-aimet_torch.v2.nn.custom.Where                FakeQuantizedWhere
-aimet_torch.v2.nn.custom.MaskedFill           FakeQuantizedMaskedFill
-============================================= ============================================= ============================
+Quantized Module Classes
+========================
+
+============================================= =========================================
+nn.Module                                     QuantizationMixin
+============================================= =========================================
+torch.nn.AdaptiveAvgPool1d                    QuantizedAdaptiveAvgPool1d
+torch.nn.AdaptiveAvgPool2d                    QuantizedAdaptiveAvgPool2d
+torch.nn.AdaptiveAvgPool3d                    QuantizedAdaptiveAvgPool3d
+torch.nn.AdaptiveMaxPool1d                    QuantizedAdaptiveMaxPool1d
+torch.nn.AdaptiveMaxPool2d                    QuantizedAdaptiveMaxPool2d
+torch.nn.AdaptiveMaxPool3d                    QuantizedAdaptiveMaxPool3d
+torch.nn.AlphaDropout                         QuantizedAlphaDropout
+torch.nn.AvgPool1d                            QuantizedAvgPool1d
+torch.nn.AvgPool2d                            QuantizedAvgPool2d
+torch.nn.AvgPool3d                            QuantizedAvgPool3d
+torch.nn.BatchNorm1d                          QuantizedBatchNorm1d
+torch.nn.BatchNorm2d                          QuantizedBatchNorm2d
+torch.nn.BatchNorm3d                          QuantizedBatchNorm3d
+torch.nn.CELU                                 QuantizedCELU
+torch.nn.ChannelShuffle                       QuantizedChannelShuffle
+torch.nn.ConstantPad1d                        QuantizedConstantPad1d
+torch.nn.ConstantPad2d                        QuantizedConstantPad2d
+torch.nn.ConstantPad3d                        QuantizedConstantPad3d
+torch.nn.Conv1d                               QuantizedConv1d
+torch.nn.Conv2d                               QuantizedConv2d
+torch.nn.Conv3d                               QuantizedConv3d
+torch.nn.ConvTranspose1d                      QuantizedConvTranspose1d
+torch.nn.ConvTranspose2d                      QuantizedConvTranspose2d
+torch.nn.ConvTranspose3d                      QuantizedConvTranspose3d
+torch.nn.Dropout                              QuantizedDropout
+torch.nn.Dropout2d                            QuantizedDropout2d
+torch.nn.Dropout3d                            QuantizedDropout3d
+torch.nn.ELU                                  QuantizedELU
+torch.nn.FeatureAlphaDropout                  QuantizedFeatureAlphaDropout
+torch.nn.Flatten                              QuantizedFlatten
+torch.nn.Fold                                 QuantizedFold
+torch.nn.FractionalMaxPool2d                  QuantizedFractionalMaxPool2d
+torch.nn.FractionalMaxPool3d                  QuantizedFractionalMaxPool3d
+torch.nn.GELU                                 QuantizedGELU
+torch.nn.GLU                                  QuantizedGLU
+torch.nn.GroupNorm                            QuantizedGroupNorm
+torch.nn.Hardshrink                           QuantizedHardshrink
+torch.nn.Hardsigmoid                          QuantizedHardsigmoid
+torch.nn.Hardswish                            QuantizedHardswish
+torch.nn.Hardtanh                             QuantizedHardtanh
+torch.nn.InstanceNorm1d                       QuantizedInstanceNorm1d
+torch.nn.InstanceNorm2d                       QuantizedInstanceNorm2d
+torch.nn.InstanceNorm3d                       QuantizedInstanceNorm3d
+torch.nn.LPPool1d                             QuantizedLPPool1d
+torch.nn.LPPool2d                             QuantizedLPPool2d
+torch.nn.LayerNorm                            QuantizedLayerNorm
+torch.nn.LeakyReLU                            QuantizedLeakyReLU
+torch.nn.Linear                               QuantizedLinear
+torch.nn.LocalResponseNorm                    QuantizedLocalResponseNorm
+torch.nn.LogSigmoid                           QuantizedLogSigmoid
+torch.nn.LogSoftmax                           QuantizedLogSoftmax
+torch.nn.MaxPool1d                            QuantizedMaxPool1d
+torch.nn.MaxPool2d                            QuantizedMaxPool2d
+torch.nn.MaxPool3d                            QuantizedMaxPool3d
+torch.nn.MaxUnpool1d                          QuantizedMaxUnpool1d
+torch.nn.MaxUnpool2d                          QuantizedMaxUnpool2d
+torch.nn.MaxUnpool3d                          QuantizedMaxUnpool3d
+torch.nn.Mish                                 QuantizedMish
+torch.nn.PReLU                                QuantizedPReLU
+torch.nn.PixelShuffle                         QuantizedPixelShuffle
+torch.nn.PixelUnshuffle                       QuantizedPixelUnshuffle
+torch.nn.RReLU                                QuantizedRReLU
+torch.nn.ReLU                                 QuantizedReLU
+torch.nn.ReLU6                                QuantizedReLU6
+torch.nn.ReflectionPad1d                      QuantizedReflectionPad1d
+torch.nn.ReflectionPad2d                      QuantizedReflectionPad2d
+torch.nn.ReplicationPad1d                     QuantizedReplicationPad1d
+torch.nn.ReplicationPad2d                     QuantizedReplicationPad2d
+torch.nn.ReplicationPad3d                     QuantizedReplicationPad3d
+torch.nn.SELU                                 QuantizedSELU
+torch.nn.SiLU                                 QuantizedSiLU
+torch.nn.Sigmoid                              QuantizedSigmoid
+torch.nn.Softmax                              QuantizedSoftmax
+torch.nn.Softmax2d                            QuantizedSoftmax2d
+torch.nn.Softmin                              QuantizedSoftmin
+torch.nn.Softplus                             QuantizedSoftplus
+torch.nn.Softshrink                           QuantizedSoftshrink
+torch.nn.Softsign                             QuantizedSoftsign
+torch.nn.Tanh                                 QuantizedTanh
+torch.nn.Tanhshrink                           QuantizedTanhshrink
+torch.nn.Threshold                            QuantizedThreshold
+torch.nn.Unflatten                            QuantizedUnflatten
+torch.nn.Unfold                               QuantizedUnfold
+torch.nn.Upsample                             QuantizedUpsample
+torch.nn.UpsamplingBilinear2d                 QuantizedUpsamplingBilinear2d
+torch.nn.UpsamplingNearest2d                  QuantizedUpsamplingNearest2d
+torch.nn.ZeroPad2d                            QuantizedZeroPad2d
+torch.nn.BCELoss                              QuantizedBCELoss
+torch.nn.BCEWithLogitsLoss                    QuantizedBCEWithLogitsLoss
+torch.nn.Bilinear                             QuantizedBilinear
+torch.nn.CTCLoss                              QuantizedCTCLoss
+torch.nn.CosineSimilarity                     QuantizedCosineSimilarity
+torch.nn.CrossEntropyLoss                     QuantizedCrossEntropyLoss
+torch.nn.HingeEmbeddingLoss                   QuantizedHingeEmbeddingLoss
+torch.nn.HuberLoss                            QuantizedHuberLoss
+torch.nn.KLDivLoss                            QuantizedKLDivLoss
+torch.nn.L1Loss                               QuantizedL1Loss
+torch.nn.MSELoss                              QuantizedMSELoss
+torch.nn.MultiLabelMarginLoss                 QuantizedMultiLabelMarginLoss
+torch.nn.MultiLabelSoftMarginLoss             QuantizedMultiLabelSoftMarginLoss
+torch.nn.MultiMarginLoss                      QuantizedMultiMarginLoss
+torch.nn.NLLLoss                              QuantizedNLLLoss
+torch.nn.NLLLoss2d                            QuantizedNLLLoss2d
+torch.nn.PairwiseDistance                     QuantizedPairwiseDistance
+torch.nn.PoissonNLLLoss                       QuantizedPoissonNLLLoss
+torch.nn.SmoothL1Loss                         QuantizedSmoothL1Loss
+torch.nn.SoftMarginLoss                       QuantizedSoftMarginLoss
+torch.nn.CosineEmbeddingLoss                  QuantizedCosineEmbeddingLoss
+torch.nn.GaussianNLLLoss                      QuantizedGaussianNLLLoss
+torch.nn.MarginRankingLoss                    QuantizedMarginRankingLoss
+torch.nn.TripletMarginLoss                    QuantizedTripletMarginLoss
+torch.nn.TripletMarginWithDistanceLoss        QuantizedTripletMarginWithDistanceLoss
+torch.nn.Embedding                            QuantizedEmbedding
+torch.nn.EmbeddingBag                         QuantizedEmbeddingBag
+torch.nn.GRU                                  QuantizedGRU
+torch.nn.RNN                                  QuantizedRNN
+torch.nn.GRUCell                              QuantizedGRUCell
+torch.nn.RNNCell                              QuantizedRNNCell
+torch.nn.LSTM                                 QuantizedLSTM
+torch.nn.LSTMCell                             QuantizedLSTMCell
+aimet_torch.v2.nn.custom.AvgPool2d            QuantizedAvgPool2d
+aimet_torch.v2.nn.custom.CumSum               QuantizedCumSum
+aimet_torch.v2.nn.custom.Sin                  QuantizedSin
+aimet_torch.v2.nn.custom.Cos                  QuantizedCos
+aimet_torch.v2.nn.custom.RSqrt                QuantizedRSqrt
+aimet_torch.v2.nn.custom.Reshape              QuantizedReshape
+aimet_torch.v2.nn.custom.MatMul               QuantizedMatMul
+aimet_torch.v2.nn.custom.Add                  QuantizedAdd
+aimet_torch.v2.nn.custom.Multiply             QuantizedMultiply
+aimet_torch.v2.nn.custom.Subtract             QuantizedSubtract
+aimet_torch.v2.nn.custom.Divide               QuantizedDivide
+aimet_torch.v2.nn.custom.Bmm                  QuantizedBmm
+aimet_torch.v2.nn.custom.Baddbmm              QuantizedBaddbmm
+aimet_torch.v2.nn.custom.Addmm                QuantizedAddmm
+aimet_torch.v2.nn.custom.Concat               QuantizedConcat
+============================================= =========================================
+
+..
+    aimet_torch.v2.nn.custom.ChannelShuffle       QuantizedChannelShuffle
+    aimet_torch.v2.nn.custom.MaxPool2d            QuantizedMaxPool2d
+    aimet_torch.v2.nn.custom.AdaptiveAvgPool2d    QuantizedAdaptiveAvgPool2d
+    aimet_torch.v2.nn.custom.Cast                 QuantizedCast
+    aimet_torch.v2.nn.custom.DepthToSpaceDCRMode  QuantizedDepthToSpaceDCRMode
+    aimet_torch.v2.nn.custom.OneHot               QuantizedOneHot
+    aimet_torch.v2.nn.custom.Exponential          QuantizedExponential
+    aimet_torch.v2.nn.custom.Erf                  QuantizedErf
+    aimet_torch.v2.nn.custom.Sqrt                 QuantizedSqrt
+    aimet_torch.v2.nn.custom.Log                  QuantizedLog
+    aimet_torch.v2.nn.custom.Abs                  QuantizedAbs
+    aimet_torch.v2.nn.custom.Neg                  QuantizedNeg
+    aimet_torch.v2.nn.custom.ElementwiseCeil      QuantizedElementwiseCeil
+    aimet_torch.v2.nn.custom.ElementwiseFloor     QuantizedElementwiseFloor
+    aimet_torch.v2.nn.custom.Asin                 QuantizedAsin
+    aimet_torch.v2.nn.custom.Atan                 QuantizedAtan
+    aimet_torch.v2.nn.custom.Round                QuantizedRound
+    aimet_torch.v2.nn.custom.LogicalNot           QuantizedLogicalNot
+    aimet_torch.v2.nn.custom.NonZero              QuantizedNonZero
+    aimet_torch.v2.nn.custom.ElementwiseUnarySign QuantizedElementwiseUnarySign
+    aimet_torch.v2.nn.custom.Square               QuantizedSquare
+    aimet_torch.v2.nn.custom.Mean                 QuantizedMean
+    aimet_torch.v2.nn.custom.Sum                  QuantizedSum
+    aimet_torch.v2.nn.custom.Prod                 QuantizedProd
+    aimet_torch.v2.nn.custom.Argmin               QuantizedArgmin
+    aimet_torch.v2.nn.custom.Argmax               QuantizedArgmax
+    aimet_torch.v2.nn.custom.Gather               QuantizedGather
+    aimet_torch.v2.nn.custom.RoiAlign             QuantizedRoiAlign
+    aimet_torch.v2.nn.custom.Permute              QuantizedPermute
+    aimet_torch.v2.nn.custom.IndexSelect          QuantizedIndexSelect
+    aimet_torch.v2.nn.custom.TopK                 QuantizedTopK
+    aimet_torch.v2.nn.custom.Tile                 QuantizedTile
+    aimet_torch.v2.nn.custom.Norm                 QuantizedNorm
+    aimet_torch.v2.nn.custom.Interpolate          QuantizedInterpolate
+    aimet_torch.v2.nn.custom.Normalize            QuantizedNormalize
+    aimet_torch.v2.nn.custom.Pad                  QuantizedPad
+    aimet_torch.v2.nn.custom.Shape                QuantizedShape
+    aimet_torch.v2.nn.custom.Expand               QuantizedExpand
+    aimet_torch.v2.nn.custom.StridedSlice         QuantizedStridedSlice
+    aimet_torch.v2.nn.custom.FloorDivide          QuantizedFloorDivide
+    aimet_torch.v2.nn.custom.Greater              QuantizedGreater
+    aimet_torch.v2.nn.custom.Less                 QuantizedLess
+    aimet_torch.v2.nn.custom.GreaterEqual         QuantizedGreaterEqual
+    aimet_torch.v2.nn.custom.LessEqual            QuantizedLessEqual
+    aimet_torch.v2.nn.custom.NotEqual             QuantizedNotEqual
+    aimet_torch.v2.nn.custom.Equal                QuantizedEqual
+    aimet_torch.v2.nn.custom.Remainder            QuantizedRemainder
+    aimet_torch.v2.nn.custom.Fmod                 QuantizedFmod
+    aimet_torch.v2.nn.custom.Pow                  QuantizedPow
+    aimet_torch.v2.nn.custom.CustomSiLU           QuantizedCustomSiLU
+    aimet_torch.v2.nn.custom.Maximum              QuantizedMaximum
+    aimet_torch.v2.nn.custom.Max                  QuantizedMax
+    aimet_torch.v2.nn.custom.Minimum              QuantizedMinimum
+    aimet_torch.v2.nn.custom.Min                  QuantizedMin
+    aimet_torch.v2.nn.custom.LogicalOr            QuantizedLogicalOr
+    aimet_torch.v2.nn.custom.LogicalAnd           QuantizedLogicalAnd
+    aimet_torch.v2.nn.custom.CustomGather         QuantizedCustomGather
+    aimet_torch.v2.nn.custom.GatherNd             QuantizedGatherNd
+    aimet_torch.v2.nn.custom.ScatterND            QuantizedScatterND
+    aimet_torch.v2.nn.custom.DynamicConv2d        QuantizedDynamicConv2d
+    aimet_torch.v2.nn.custom.ScatterElements      QuantizedScatterElements
+    aimet_torch.v2.nn.custom.BatchNorm            QuantizedBatchNorm
+    aimet_torch.v2.nn.custom.GroupNorm            QuantizedAimetGroupNorm
+    aimet_torch.v2.nn.custom.NonMaxSuppression    QuantizedNonMaxSuppression
+    aimet_torch.v2.nn.custom.Split                QuantizedSplit
+    aimet_torch.v2.nn.custom.Where                QuantizedWhere
+    aimet_torch.v2.nn.custom.MaskedFill           QuantizedMaskedFill

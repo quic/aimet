@@ -91,11 +91,10 @@ Please view the :ref:`Quickstart Guide<ug-torch-quickstart>` for a more in-depth
 
    quantized_modules
    quantizer
-   encoding_analyzer
-   api/nn.fake_quantization_mixin
    api/nn.quantization_mixin
    api/quantization/affine/index
    api/quantization/float/index
+   encoding_analyzer
 
 
 

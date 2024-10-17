@@ -133,42 +133,25 @@ class QuantizationMixinMeta(ABCMeta):
 class QuantizationMixin(BaseQuantizationMixin, metaclass=QuantizationMixinMeta): # pylint: disable=abstract-method
     """Mixin that adds quantization functionality on top of regular pytorch modules.
 
-    :class:`QuantizationMixin` provides all the same behavior as :class:`FakeQuantizationMixin`, and by default, a
-    quantized module behaves exactly the same as a fake-quantized version of the same :class:`torch.nn.Module`. On top
-    of this functionality, :class:`QuantizationMixin` provides the ability to set custom quantized kernels which will be
-    called in place of the floating-point pytorch operation in the forward pass.
+    Specifically, a quantized module will quantize input, output, and parameter tensors with
+    its held :class:`QuantizerBase` objects during the :meth:`forward` method and use the inherited :class:`torch.nn.Module`
+    forward method to compute the layer operation. If all input, output, and parameter quantizers are ``None``, a
+    quantized module will behave exactly the same as its parent :class:`torch.nn.Module`.
 
     Attributes:
-        input_quantizers (nn.ModuleList): :class:`ModuleList` containing :class:`QuantizerBase` objects to be applied
+        input_quantizers: :class:`torch.nn.ModuleList` containing :class:`QuantizerBase` objects to be applied
             to the layer's input tensors
-        output_quantizers (nn.ModuleList): :class:`ModuleList` containing :class:`QuantizerBase` objects to be applied
+        output_quantizers: :class:`torch.nnModuleList` containing :class:`QuantizerBase` objects to be applied
             to the layer's output tensors
-        param_quantizers (nn.ModuleDict): :class:`ModuleDict` mapping parameter names to associated :class:`QuantizerBase`
+        param_quantizers: :class:`torch.nn.ModuleDict` mapping parameter names to associated :class:`QuantizerBase`
             objects
 
     Examples:
 
-        >>> qlinear = QuantizedLinear(in_features=10, out_features=10, bias=False)
+        >>> qlinear = QuantizedLinear(in_features=10, out_features=10)
         >>> print(qlinear)
         QuantizedLinear(
-          in_features=10, out_features=10, bias=False
-          (param_quantizers): ModuleDict(
-            (weight): None
-          )
-          (input_quantizers): ModuleList(
-            (0): None
-          )
-          (output_quantizers): ModuleList(
-            (0): None
-          )
-        )
-
-
-        >>> linear = torch.nn.Linear(in_features=10, out_features=20, bias=True)
-        >>> qlinear = QuantizationMixin.from_module(linear)
-        >>> print(qlinear)
-        QuantizedLinear(
-          in_features=10, out_features=20, bias=True
+          in_features=10, out_features=10, bias=True
           (param_quantizers): ModuleDict(
             (weight): None
             (bias): None
@@ -180,8 +163,6 @@ class QuantizationMixin(BaseQuantizationMixin, metaclass=QuantizationMixinMeta):
             (0): None
           )
         )
-        >>> qlinear.weight is linear.weight
-        True
 
     """
 
@@ -195,19 +176,15 @@ class QuantizationMixin(BaseQuantizationMixin, metaclass=QuantizationMixinMeta):
     def forward(self, *args, **kwargs):
         """Computes a quantized version of the parent module's forward method.
 
-        If no custom kernel has been set for the layer or the layer is called within its compute_encodings context,
-        this will fall back to the fake-quantized forward pass used in the equivalent :class:`FakeQuantizationMixin`
-        module.
-
-        If a custom kernel implementation is available for the layer (i.e., :meth:`get_kernel` does not return ``None``),
-        this method will perform the following logic:
+        The :meth:`forward` method should perform the following logic in order:
 
             1) Apply existing input quantizers to input tensors
-            2) Apply existing parameter quantizers to the layer's parameters
-            3) Call into the kernel retrieved by :meth:`get_kernel`, passing the quantized inputs and parameters as well
-               as the output encodings from :attr:`output_quantizers`
-            4) Dequantize the output of the kernel call
+            2) Apply existing param quantizers to the layer's parameters
+            3) Call the inherited :class:`torch.nn.Module` forward method with quantized inputs and parameters
+            4) Apply existing output quantizers to the outputs of the forward method
 
+        If all input, output, and parameter quantizers are ``None``, this method will behave exactly the same as
+        its parent module's forward pass.
         """
         return super().forward(*args, **kwargs)
 
@@ -215,7 +192,6 @@ class QuantizationMixin(BaseQuantizationMixin, metaclass=QuantizationMixinMeta):
     def set_default_kernel(cls, kernel: Callable):
         """Set default kernel for the class.
 
-        The function signature of this kernel must match the signature used in the :meth:`quantized_forward` method.
         In general, this signature will follow the signature of the equivalent :mod:`torch.nn.functional` function,
         but should return a :class:`QuantizedTensor` object and take in the additional keyword argument ``output_encodings``.
 
@@ -260,7 +236,6 @@ class QuantizationMixin(BaseQuantizationMixin, metaclass=QuantizationMixinMeta):
     def set_kernel(self, kernel: Callable):
         """Set kernel for this instance of quantized module.
 
-        The function signature of this kernel must match the signature used in the :meth:`forward` method.
         In general, this signature will follow the signature of the equivalent :mod:`torch.nn.functional` function,
         but should return a :class:`QuantizedTensor` object and take in the additional keyword argument ``output_encodings``.
 
@@ -331,6 +306,39 @@ class QuantizationMixin(BaseQuantizationMixin, metaclass=QuantizationMixinMeta):
         base_classes = (cls, module_cls)
         quantized_cls = type(quantized_cls_name, base_classes, {'__module__': __name__})
         return cls.implements(module_cls)(quantized_cls)
+
+    @classmethod
+    def from_module(cls, module: nn.Module):
+        r"""Create an instance of quantized module from a regular module instance.
+
+        The resulting quantized module contains the same attributes and parameters as the original module, but may
+        be assigned input, output and parameter quantizers.
+
+        :param module: Floating point module to quantize
+        :return: Quantized version of the original module
+
+        Example:
+
+            >>> linear = torch.nn.Linear(10, 10)
+            >>> quantized_linear = QuantizationMixin.from_module(linear)
+            >>> print(quantized_linear.param_quantizers)
+            QuantizedLinear(
+              in_features=10, out_features=10, bias=True
+              (param_quantizers): ModuleDict(
+                (weight): None
+                (bias): None
+              )
+              (input_quantizers): ModuleList(
+                (0): None
+              )
+              (output_quantizers): ModuleList(
+                (0): None
+              )
+            )
+            >>> print(quantized_linear.weight is linear.weight)
+            True
+        """
+        return super().from_module(module)
 
 
 # pylint: disable=too-many-ancestors
