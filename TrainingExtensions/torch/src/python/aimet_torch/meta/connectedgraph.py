@@ -1246,7 +1246,7 @@ class ConnectedGraph(AimetCommonConnectedGraph):
         :param trace: torch.jit trace of the module
         :return: Boolean whether recursive parsing needed or not. If needed returns True, False otherwise.
         """
-        from aimet_torch.v2.nn import BaseQuantizationMixin
+        from aimet_torch.v2.nn import BaseQuantizationMixin # pylint: disable=import-outside-toplevel
         if isinstance(module, BaseQuantizationMixin):
             return self._is_recursive_parsing_needed(module.get_original_module(), trace)
 
