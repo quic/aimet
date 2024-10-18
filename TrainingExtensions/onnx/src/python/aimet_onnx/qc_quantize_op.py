@@ -628,12 +628,6 @@ class GroupedBlockQuantizeDequantize(QcQuantizeOp):
         raise NotImplementedError(f"0.6.1 encoding format is not supported for {type(self).__qualname__}. Please export "
                                   f"using 1.0.0 format instead.")
 
-    def _get_per_block_integer_scale(self):
-        block_grouping = self._block_grouping()
-        scale, _ = lpbq_utils.encodings_to_scale_offset_arrays(self.get_encodings(), self._encoding_shape())
-        int_scale, _ = lpbq_utils.grouped_dynamic_quantize(scale, block_grouping, self.decompressed_bw - self.bitwidth)
-        return int_scale
-
     def _encoding_type(self):
         encoding_type = super()._encoding_type()
         if encoding_type == EncodingType.PER_BLOCK:
@@ -646,9 +640,12 @@ class GroupedBlockQuantizeDequantize(QcQuantizeOp):
             return None
         assert "block_size" in encodings.keys()
 
-        encodings["offset"] = [-2 ** (self.decompressed_bw - 1) for _ in encodings['scale']]
         encodings["compressed_bw"] = self.bitwidth
         encodings["bw"] = self.decompressed_bw
-        encodings['per_block_int_scale'] = self._get_per_block_integer_scale().flatten().tolist()
+        scale, _ = lpbq_utils.encodings_to_scale_offset_arrays(self.get_encodings(), self._encoding_shape())
+        int_scale, per_block_scale = lpbq_utils.grouped_dynamic_quantize(scale, self._block_grouping(), self.decompressed_bw - self.bitwidth)
+        encodings['per_block_int_scale'] = int_scale.flatten().tolist()
+        encodings['scale'] = per_block_scale.flatten().tolist()
+        encodings["offset"] = [-2 ** (self.decompressed_bw - 1) for _ in encodings['scale']]
 
         return encodings

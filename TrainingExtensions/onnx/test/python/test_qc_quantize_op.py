@@ -910,6 +910,7 @@ class TestLPBQOp:
             [1.6, 1.1, .1],
             [16, 3, 5]
         ], np.float32)
+        expected_per_channel_scale = np.asarray([1.6 / 2 ** 4, 16 / 2 ** 4])
         bitwidth = 4
         decompressed_bw = 8
         quant_info = libquant_info.QcQuantizeInfo()
@@ -964,7 +965,8 @@ class TestLPBQOp:
         assert exported_encodings["compressed_bw"] == 4
         assert exported_encodings["bw"] == 8
         assert exported_encodings["enc_type"] == EncodingType.LPBQ.name
-        assert np.allclose(np.asarray(exported_encodings["scale"], np.float32), expected_lpbq_scale.flatten())
+        assert np.allclose(np.asarray(exported_encodings["scale"]), np.asarray(expected_per_channel_scale))
+        assert exported_encodings["offset"] == [-128, -128]
 
         with pytest.raises(NotImplementedError):
             lpbq_op.export_encodings("0.6.1")

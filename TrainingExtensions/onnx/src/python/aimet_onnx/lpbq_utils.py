@@ -90,6 +90,7 @@ def grouped_dynamic_quantize(input_array: np.ndarray,
     """
     dynamic_scale = _get_per_group_scale_factor(input_array, grouping, bitwidth)
     grouped_scale = _split_blocks(input_array, grouping)
+    # Note: following aimet_torch implementation, clip to 2 ** bitwidth
     quantized_input = np.clip(np.round(grouped_scale / dynamic_scale), 1, 2 ** bitwidth).astype(np.int32)
     return quantized_input.reshape(input_array.shape), dynamic_scale
 
