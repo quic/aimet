@@ -1202,6 +1202,8 @@ def clamp_activation_encodings(quant_sim: QuantizationSimModel, clamp_val: float
     :param clamp_val: positive float value
     :return:
     """
-    for name in quant_sim.activation_names:
-        quantizer = quant_sim.qc_quantize_op_dict.get(name)
-        quantizer.clip_and_recompute_encodings(name, clamp_val)
+    for act_name in quant_sim.activation_names:
+        quantizer = quant_sim.qc_quantize_op_dict.get(act_name)
+        is_clipped = quantizer.clip_and_recompute_encodings(clamp_val)
+        if is_clipped:
+            logger.info("Clamped tensor %s", act_name)
