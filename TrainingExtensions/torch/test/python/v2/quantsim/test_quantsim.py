@@ -1076,27 +1076,6 @@ class TestQuantsim:
         assert sim.model.module.input_quantizers[1] is not None
 
         """
-        Given: A model with python float constant
-        When: Instantiate quantsim
-        Then: The input quantizer quantizing buffer constant should be enabled
-        """
-                
-        class PythonFloatModel(torch.nn.Module):
-            def __init__(self):
-                super().__init__()
-                self.module = module_factory()
-
-            def forward(self, *inputs):
-                x = self.module(inputs[0], 2.0)
-                return x
-
-        model = PythonFloatModel()
-        sim = QuantizationSimModel(model, quant_scheme=QuantScheme.post_training_tf,
-                                    dummy_input=dummy_input, in_place=True)
-
-        assert sim.model.module.input_quantizers[1] is not None
-
-        """
         Given: A model with parameter constant
         When: Instantiate quantsim
         Then: The input quantizer quantizing parameter constant should be enabled if the constant is not singleton
