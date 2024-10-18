@@ -141,7 +141,7 @@ class QuantizationMixin(BaseQuantizationMixin, metaclass=QuantizationMixinMeta):
     Attributes:
         input_quantizers: :class:`torch.nn.ModuleList` containing :class:`QuantizerBase` objects to be applied
             to the layer's input tensors
-        output_quantizers: :class:`torch.nnModuleList` containing :class:`QuantizerBase` objects to be applied
+        output_quantizers: :class:`torch.nn.ModuleList` containing :class:`QuantizerBase` objects to be applied
             to the layer's output tensors
         param_quantizers: :class:`torch.nn.ModuleDict` mapping parameter names to associated :class:`QuantizerBase`
             objects
