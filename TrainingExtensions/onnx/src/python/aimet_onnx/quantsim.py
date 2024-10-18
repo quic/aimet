@@ -491,8 +491,7 @@ class QuantizationSimModel:
                                                           rounding_mode=self._rounding_mode,
                                                           op_mode=OpMode.updateStats,
                                                           bitwidth=self._default_activation_bw,
-                                                          use_symmetric_encodings=self._use_symmetric_encodings
-                                                          )
+                                                          use_symmetric_encodings=self._use_symmetric_encodings)
 
     @staticmethod
     def build_session(model: onnx.ModelProto, providers: List, user_onnx_libs: List[str] = None, path: str = None):
@@ -1192,3 +1191,19 @@ def set_blockwise_quantization_for_weights(sim: QuantizationSimModel,
                     weight_quantizer.set_bitwidth(bitwidth)
                     weight_quantizer.use_symmetric_encodings = symmetric
                     weight_quantizer.data_type = QuantizationDataType.int
+
+
+# pylint: disable=protected-access
+def clamp_activation_encodings(quant_sim: QuantizationSimModel, clamp_val: float):
+    """
+    Clamp activations to specific range if out of bound.
+
+    :param quant_sim: quantsim object
+    :param clamp_val: positive float value
+    :return:
+    """
+    for act_name in quant_sim.activation_names:
+        quantizer = quant_sim.qc_quantize_op_dict.get(act_name)
+        is_clipped = quantizer.clip_and_recompute_encodings(clamp_val)
+        if is_clipped:
+            logger.info("Clamped tensor %s", act_name)

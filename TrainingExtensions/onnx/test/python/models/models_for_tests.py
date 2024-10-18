@@ -2411,3 +2411,46 @@ def gather_op_with_int_data_model():
     )
     onnx.checker.check_model(model, True)
     return model
+
+
+def matmul_add_model():
+    model = helper.make_model(
+        graph=helper.make_graph(
+            name='MatMulAddModel',
+            inputs=[helper.make_tensor_value_info('model_input', TensorProto.FLOAT, shape=[1, 1, 8, 8])],
+            outputs=[helper.make_tensor_value_info('model_output', TensorProto.FLOAT, shape=[1, 1, 8, 8])],
+            initializer=[
+                numpy_helper.from_array(np.full((1, 1, 8, 8), 25.0).astype('float32'), name='matmul_1.weight'),
+                numpy_helper.from_array(np.full((1, 1, 8, 8), 100.0).astype('float32'), name='add_1.weight'),
+                numpy_helper.from_array(np.full((1, 1, 8, 8), -50.0).astype('float32'), name='add_2.weight'),
+            ],
+            nodes=[
+                helper.make_node(
+                    'MatMul',
+                    inputs=['model_input', 'matmul_1.weight'],
+                    outputs=['matmul_1.output'],
+                    name='matmul_1'
+                ),
+                helper.make_node(
+                    'Add',
+                    inputs=['matmul_1.output', 'add_1.weight'],
+                    outputs=['add_1.output'],
+                    name='add_1'
+                ),
+                helper.make_node(
+                    'MatMul',
+                    inputs=['model_input', 'add_1.output'],
+                    outputs=['matmul_2.output'],
+                    name='matmul_2'
+                ),
+                helper.make_node(
+                    'Add',
+                    inputs=['matmul_2.output', 'add_2.weight'],
+                    outputs=['model_output'],
+                    name='add_2'
+                )
+            ]
+        )
+    )
+    onnx.checker.check_model(model, True)
+    return model

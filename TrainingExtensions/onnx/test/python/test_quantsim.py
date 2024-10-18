@@ -52,7 +52,7 @@ from aimet_common import quantsim
 from aimet_common import libquant_info
 from aimet_common.defs import QuantScheme, QuantizationDataType, EncodingType
 from aimet_common.quantsim_config.utils import get_path_for_per_channel_config
-from aimet_onnx.quantsim import QuantizationSimModel, load_encodings_to_sim, set_blockwise_quantization_for_weights, _apply_constraints
+from aimet_onnx.quantsim import QuantizationSimModel, load_encodings_to_sim, set_blockwise_quantization_for_weights, _apply_constraints, clamp_activation_encodings
 from aimet_onnx.qc_quantize_op import OpMode
 from aimet_onnx.utils import make_dummy_input
 from models.models_for_tests import SingleResidual
@@ -1271,6 +1271,7 @@ class TestQuantSim:
                 encoding_data = json.load(json_file)
                 assert 'gather_weight' not in encoding_data['activation_encodings'].keys()
 
+
 class TestEncodingPropagation:
 
     def test_output(self):
@@ -1449,3 +1450,57 @@ class TestEncodingPropagation:
                 if cg_op.type in ['Conv']:
                     _, out_qtzr, __ = sim.get_op_quantizers(cg_op)
                     assert _compare_encodings(out_qtzr[0].encodings[0], sim.qc_quantize_op_dict['output'].encodings[0])
+
+    def test_clamp_activation_encodings(self):
+        model = models_for_tests.matmul_add_model()
+        dummy_input = {'model_input': np.expand_dims(np.identity(8, np.float32), axis=(0, 1))}
+        quantsim_config = {
+            "defaults":
+                {
+                    "hw_version": "V73",
+                    "ops":
+                        {
+                            "is_output_quantized": "True"
+                        },
+                    "params":
+                        {
+                            "is_quantized": "True",
+                            "is_symmetric": "False"
+                        },
+                    "per_channel_quantization": "False",
+                    "strict_symmetric": "False",
+                    "unsigned_symmetric": "False"
+                },
+            "params": {},
+            "op_type": {},
+            "supergroups": [],
+            "model_input": {
+                "is_input_quantized": "True"
+            },
+            "model_output": {
+                "is_output_quantized": "True"
+            }
+        }
+
+        with tempfile.TemporaryDirectory() as tempdir:
+            with open(os.path.join(tempdir, 'quantsim_config.json'), 'w') as f:
+                json.dump(quantsim_config, f)
+
+            sim = QuantizationSimModel(model, dummy_input, path=tempdir, config_file=os.path.join(tempdir, 'quantsim_config.json'))
+
+            def callback(session, dummy_input):
+                session.run(None, dummy_input)
+
+            sim.compute_encodings(callback, dummy_input)
+            clamp_activation_encodings(sim, 100.0)
+
+            sim.export(tempdir, 'matmul_add_quantsim')
+
+            with open(os.path.join(tempdir, 'matmul_add_quantsim.encodings')) as json_file:
+                encodings = json.load(json_file)
+
+            add_act_encoding = encodings['activation_encodings']['add_1.output'][0]
+            matmul_act_encoding = encodings['activation_encodings']['matmul_2.output'][0]
+
+            assert round(add_act_encoding['max']) == 100.0
+            assert round(matmul_act_encoding['max']) == 100.0

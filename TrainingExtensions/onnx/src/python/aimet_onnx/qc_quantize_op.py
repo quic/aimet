@@ -37,12 +37,14 @@
 """ Custom QcQuantizeOp to quantize weights and activations using ONNXRuntime """
 
 from typing import Union, List, Optional, Dict
+import numpy as np
+
 import aimet_common.libpymo as libpymo
 from aimet_common.libpymo import TensorQuantizerOpMode
 from aimet_common.defs import QuantScheme, MAP_QUANT_SCHEME_TO_PYMO, MAP_ROUND_MODE_TO_PYMO, QuantizationDataType, EncodingType
 from aimet_common import libquant_info
 from aimet_common.utils import deprecated
-
+from aimet_common.quantsim import calculate_delta_offset
 
 OpMode = TensorQuantizerOpMode
 
@@ -63,6 +65,7 @@ class TensorQuantizerParams:
         self.block_axis = block_axis
 
 
+# pylint: disable=too-many-public-methods
 class QcQuantizeOp:
     """ A custom quantization operation to perform using ONNXRuntime """
 
@@ -522,3 +525,42 @@ class QcQuantizeOp:
                 enc_dict["block_size"] = self.quant_info.blockSize
 
         return enc_dict
+
+    def update_encoding_stats(self, tensor: np.ndarray):
+        """
+        Update the stats for computing encodings.
+
+        :param tensor: Tensor to use for updating the encodings stats
+        """
+        for tensor_quantizer in self._tensor_quantizer:
+            tensor_quantizer.updateStats(tensor, False)
+
+    def clip_and_recompute_encodings(self, clamp_val: float) -> bool:
+        """
+        Clips min and max values and recomputes the encodings
+
+        :param clamp_val: Clamping value
+        :return: A boolean value telling whether clipping was performed
+        """
+        encodings = self.get_encodings()
+        is_clipped = False
+
+        if (not encodings) or (not self.enabled) or self._is_encoding_frozen:
+            return None
+
+        for encoding in encodings:
+            e_min = encoding.min
+            e_max = encoding.max
+            if e_min < -clamp_val or e_max > clamp_val:
+                tensor = np.clip(np.array([e_min, e_max]), -clamp_val, clamp_val)
+                delta, offset = calculate_delta_offset(min_val=tensor[0], max_val=tensor[1], bitwidth=self.bitwidth,
+                                                       use_symmetric_encodings=self.use_symmetric_encodings,
+                                                       use_strict_symmetric=self.use_strict_symmetric)
+                encoding.min = tensor[0]
+                encoding.max = tensor[1]
+                encoding.delta = delta
+                encoding.offset = offset
+
+                is_clipped = True
+
+        return is_clipped
