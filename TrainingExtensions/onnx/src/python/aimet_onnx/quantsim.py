@@ -1238,7 +1238,7 @@ def set_grouped_blockwise_quantization_for_weights(sim: QuantizationSimModel,
                                                                        decompressed_bw,
                                                                        block_size,
                                                                        weight_quantizer.quant_scheme,
-                                                                       OpMode.oneShotQuantizeDequantize,
+                                                                       weight_quantizer.op_mode,
                                                                        weight_quantizer.tensor_quantizer_params)
                 except ValueError as e:
                     if strict:
