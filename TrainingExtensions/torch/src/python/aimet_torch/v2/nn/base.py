@@ -309,7 +309,7 @@ class BaseQuantizationMixin(abc.ABC):
                 continue
             if quantizer is None:
                 if strict:
-                    raise RuntimeError
+                    raise RuntimeError(f"Failed to import input encoding at index {i}: no quantizer present.")
                 continue
             if isinstance(encoding, dict):
                 encoding = [encoding]
@@ -359,7 +359,7 @@ class BaseQuantizationMixin(abc.ABC):
                 continue
             if quantizer is None:
                 if strict:
-                    raise RuntimeError
+                    raise RuntimeError(f"Failed to import output encoding at index {i}: no quantizer present.")
                 continue
             if isinstance(encoding, dict):
                 encoding = [encoding]
@@ -452,7 +452,7 @@ class BaseQuantizationMixin(abc.ABC):
                 continue
             if quantizer is None:
                 if strict:
-                    raise RuntimeError
+                    raise RuntimeError(f"Failed to import encoding for parameter {param_name}: no quantizer present.")
                 continue
             if isinstance(encoding, dict):
                 encoding = [encoding]

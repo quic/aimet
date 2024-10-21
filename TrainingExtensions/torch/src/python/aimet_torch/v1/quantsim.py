@@ -1785,11 +1785,15 @@ class QuantizationSimModel:
                     for param_name, _ in quant_module.param_quantizers.items()
                     if f'{name}.{param_name}' in encoding_dict
                 }
-                quant_module.import_param_encodings(param_encoding,
-                                                    strict,
-                                                    partial,
-                                                    requires_grad,
-                                                    allow_overwrite)
+                try:
+                    quant_module.import_param_encodings(param_encoding,
+                                                        strict,
+                                                        partial,
+                                                        requires_grad,
+                                                        allow_overwrite)
+                except RuntimeError as e:
+                    raise RuntimeError(f"Encoding import failed for module: {name}.\n{str(e)}") from e
+
 
     def _set_activation_encodings(self,
                                   activation_encoding_dict: Mapping,
@@ -1806,22 +1810,28 @@ class QuantizationSimModel:
             except KeyError:
                 input_encoding = {}
 
-            module.import_input_encodings(input_encoding,
-                                          strict,
-                                          partial,
-                                          requires_grad,
-                                          allow_overwrite)
+            try:
+                module.import_input_encodings(input_encoding,
+                                              strict,
+                                              partial,
+                                              requires_grad,
+                                              allow_overwrite)
+            except RuntimeError as e:
+                raise RuntimeError(f"Encoding import failed for module: {module_name}.\n{str(e)}") from e
 
             try:
                 output_encoding = activation_encoding_dict[module_name]['output']
             except KeyError:
                 output_encoding = {}
 
-            module.import_output_encodings(output_encoding,
-                                           strict,
-                                           partial,
-                                           requires_grad,
-                                           allow_overwrite)
+            try:
+                module.import_output_encodings(output_encoding,
+                                               strict,
+                                               partial,
+                                               requires_grad,
+                                               allow_overwrite)
+            except RuntimeError as e:
+                raise RuntimeError(f"Encoding import failed for module: {module_name}.\n{str(e)}") from e
 
 
     @deprecated(f"Use {load_encodings.__qualname__} instead.")
