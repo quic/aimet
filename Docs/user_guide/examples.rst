@@ -9,15 +9,23 @@ AIMET examples
 AIMET examples are *Jupyter Notebooks* that are intended to:
 
 - Familiarize you with the AIMET APIs
-- Demonstrate basic usage: how to apply AIMET to a model
-- Teach you how to use AIMET quantization and compression
+- Demonstrate how to apply AIMET to a model
+- Teach you how to use AIMET quantization and compression techniques
 
-For more details on each of the features and APIs see :ref:`Links to User Guide and API Documentation<ug-index>`.
+For a discussion of quantization techniques, see :doc:`/user_guide/model_quantization`.
+
+For a discussion of compression techniques, see :doc:`/user_guide/model_compression`.
+
+For the API reference, see:
+
+- :doc:`/api_docs/torch` for PyTorch
+- :doc:`/api_docs/keras` for TensorFlow
+- :doc:`/api_docs/onnx` for ONNX
 
 Browse the notebooks
 ====================
 
-The following table provides links to browsable versions of the notebooks for several different AIMET features.
+The following tables provide links to viewable versions of the notebooks for AIMET quantization and compression features. Instructions after the tables describe how to run the notebooks.
 
 **Model Quantization Examples**
 
@@ -46,7 +54,7 @@ The following table provides links to browsable versions of the notebooks for se
      - `Link <../Examples/tensorflow/quantization/keras/adaround.ipynb>`_
      - `Link <../Examples/onnx/quantization/adaround.ipynb>`_
    * - AutoQuant
-     - `Link <../Examples/torch/quantization/autoquant_v2.ipynb>`_
+     - `Link <../Examples/torch/quantization/autoquant.ipynb>`_
      - `Link <../Examples/tensorflow/quantization/keras/autoquant.ipynb>`_
      -
 
@@ -73,40 +81,74 @@ Running the notebooks
 
 To run the notebooks, follow the instructions below.
 
-Prerequisites
--------------
+1. Run the notebook server
+--------------------------
 
-#. Install the Jupyter metapackage using the following command. (If necessary, pre-pend the command with "sudo -H".)
-  .. code-block:: shell
+1. Install the Jupyter metapackage using the following command. 
+   (Prepend the command with ``sudo -H`` if necessary to grant admin privilege.)
 
-    python3 -m pip install jupyter
-#. Start the notebook server as follows:
-.. code-block:: shell
+   .. code-block:: shell
+
+      python3 -m pip install jupyter
+
+2. Start the notebook server as follows:
+
+   .. code-block:: shell
     
-    jupyter notebook --ip=* --no-browser &
-#. The command generates and displays a URL in the terminal. Copy and paste the URL into your browser.
-#. Install AIMET and its dependencies using the instructions in :doc:`install`.
+      jupyter notebook --ip=* --no-browser &
+
+   The command generates and displays a URL in the terminal. 
+   
+3. Copy and paste the URL into your browser.
+
+4. Install AIMET and its dependencies using the instructions in :doc:`AIMET installation </install/index>`.
 
 
-1. Download the example notebooks and related code
+2. Download the example notebooks and related code
 --------------------------------------------------
 
-#. Clone the AIMET repo by running the following commands:
-.. code-block:: shell
-   WORKSPACE="<absolute_path_to_workspace>"
-   mkdir $WORKSPACE && cd $WORKSPACE
-   # Identify the release tag (<release_tag>) of the AIMET package that you're working with at: https://github.com/quic/aimet/releases.
-   git clone https://github.com/quic/aimet.git --branch <release_tag>
-   # Update the path environment variable:
-   export PYTHONPATH=$PYTHONPATH:${WORKSPACE}/aimet
-#. The dataloader, evaluator, and trainer used in the examples is for the ImageNet dataset.
-  Download the ImageNet dataset from here: https://www.image-net.org/download.php
+Set up your workspace using the following steps:
 
-2. Run the notebooks
+1. Set a workspace path:
+
+   .. code-block:: shell
+      
+      WORKSPACE="<absolute_path_to_workspace>"
+
+2. Create and move to the workspace:
+
+   .. code-block:: shell
+    
+      mkdir $WORKSPACE && cd $WORKSPACE
+
+3. Identify the release tag (``<release_tag>``) of the AIMET package that you're working with at: https://github.com/quic/aimet/releases.
+
+4. Clone the repository:
+
+   .. code-block:: shell
+
+      git clone https://github.com/quic/aimet.git --branch <release_tag>
+
+5. Update the path environment variable:
+
+   .. code-block:: shell
+
+      export PYTHONPATH=$PYTHONPATH:${WORKSPACE}/aimet
+
+6. The dataloader, evaluator, and trainer used in the examples are for the ImageNet dataset. 
+   Download the ImageNet dataset from: 
+   https://www.image-net.org/download.php
+
+
+3. Run the notebooks
 --------------------
 
-#. Navigate to one of the following paths under the Examples directory and launch your chosen Jupyter Notebook (`.ipynb` extension):
-  - `Examples/torch/quantization/`
-  - `Examples/torch/compression/`
-  - `Examples/tensorflow/quantization/keras/`
-#. Follow the instructions in the notebook to execute the code.
+1. Navigate to one of the following paths in the local repository directory and launch your 
+   chosen Jupyter Notebook (`.ipynb` extension):
+
+   - `Examples/torch/quantization/`
+   - `Examples/torch/compression/`
+   - `Examples/tensorflow/quantization/keras/`
+
+2. Follow the instructions in the notebook to execute the code.
+
