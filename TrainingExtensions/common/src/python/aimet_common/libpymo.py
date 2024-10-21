@@ -41,5 +41,7 @@
 # pylint: disable=unused-wildcard-import, wildcard-import, protected-access
 try:
     from aimet_common._libpymo import *
-except ImportError:
+except ImportError as err:
+    from aimet_common import py_libpymo
+    py_libpymo.IMPORT_ERROR = err
     from aimet_common.py_libpymo import *
