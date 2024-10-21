@@ -112,7 +112,7 @@ In contrast, aimet_torch v2 enables quantization through quantized nn.Modules - 
                 (0): None
             )
     )
-    FakeQuantizedReLU(
+    QuantizedReLU(
         (param_quantizers): ModuleDict()
         (input_quantizers): ModuleList(
             (0): None

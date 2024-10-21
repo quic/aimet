@@ -1,10 +1,6 @@
 
 .. _api-torch-quantization-mixin:
 
-.. warning::
-    This feature is under heavy development and API changes may occur without notice in future verions.
-
-
 .. currentmodule:: aimet_torch.v2.nn
 
 =================
@@ -18,5 +14,3 @@ QuantizationMixin
    .. automethod:: __quant_init__
    .. automethod:: set_kernel
    .. automethod:: set_default_kernel
-
-

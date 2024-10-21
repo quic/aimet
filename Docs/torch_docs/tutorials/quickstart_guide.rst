@@ -324,7 +324,7 @@ to accurately estimate the ranges.
           )
         )
         (bn_1): Identity()
-        (module_relu): FakeQuantizedReLU(
+        (module_relu): QuantizedReLU(
           (param_quantizers): ModuleDict()
           (input_quantizers): ModuleList(
             (0): None
@@ -347,7 +347,7 @@ to accurately estimate the ranges.
           )
         )
         (bn_2): Identity()
-        (module_relu_1): FakeQuantizedReLU(
+        (module_relu_1): QuantizedReLU(
           (param_quantizers): ModuleDict()
           (input_quantizers): ModuleList(
             (0): None
