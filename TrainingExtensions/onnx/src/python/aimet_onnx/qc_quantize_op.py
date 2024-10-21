@@ -45,6 +45,8 @@ from aimet_common.defs import QuantScheme, MAP_QUANT_SCHEME_TO_PYMO, MAP_ROUND_M
 from aimet_common import libquant_info
 from aimet_common.utils import deprecated
 from aimet_common.quantsim import calculate_delta_offset
+from aimet_onnx import lpbq_utils
+
 
 OpMode = TensorQuantizerOpMode
 
@@ -564,3 +566,86 @@ class QcQuantizeOp:
                 is_clipped = True
 
         return is_clipped
+
+
+class GroupedBlockQuantizeDequantize(QcQuantizeOp):
+    """ Class for performing Grouped Block Quantize Dequantize """
+
+    def __init__(self,
+                 quant_info: libquant_info.QcQuantizeInfo,
+                 bitwidth: int,
+                 decompressed_bw: int,
+                 block_size: int,
+                 quant_scheme: QuantScheme,
+                 op_mode: OpMode,
+                 tensor_quantizer_params: TensorQuantizerParams):
+        if tensor_quantizer_params.tensor_shape[tensor_quantizer_params.block_axis] % block_size != 0:
+            raise ValueError(f"Input shape {tensor_quantizer_params.tensor_shape} is not divisible by block size "
+                             f"{block_size} at axis {tensor_quantizer_params.block_axis}")
+        super().__init__(
+            quant_info=quant_info,
+            quant_scheme=quant_scheme,
+            op_mode=op_mode,
+            bitwidth=bitwidth,
+            use_symmetric_encodings=True,
+            tensor_quantizer_params=tensor_quantizer_params,
+        )
+        self.decompressed_bw = decompressed_bw
+        self._enable_blockwise_quantization(block_size)
+        self.data_type = QuantizationDataType.int
+
+    def _encoding_shape(self):
+        tensor_shape = self.tensor_quantizer_params.tensor_shape
+        shape = [1 for _ in range(len(tensor_shape))]
+
+        if not self.quant_info.usePerChannelMode:
+            return shape
+
+        ch_axis, block_axis = self.quant_info.channelAxis, self.quant_info.blockAxis
+        assert ch_axis >= 0
+        assert block_axis >= 0
+
+        shape[ch_axis] = tensor_shape[ch_axis]
+
+        if self.quant_info.blockSize > 0:
+            shape[block_axis] = tensor_shape[block_axis] // self.quant_info.blockSize
+
+        return shape
+
+    def _block_grouping(self):
+        grouping = [1 for _ in range(len(self._encoding_shape()))]
+        if self.quant_info.blockSize > 0 and self.quant_info.blockAxis >= 0:
+            grouping[self.quant_info.blockAxis] = -1
+
+        return grouping
+
+    def load_encodings(self, encoding: List[libpymo.TfEncoding]):
+        encoding = lpbq_utils.compress_encoding_scales(encoding, self._encoding_shape(), self._block_grouping(),
+                                                        scale_bitwidth=self.decompressed_bw - self.bitwidth)
+        super().load_encodings(encoding)
+
+    def _export_legacy_encodings(self) -> Union[List, None]:
+        raise NotImplementedError(f"0.6.1 encoding format is not supported for {type(self).__qualname__}. Please export "
+                                  f"using 1.0.0 format instead.")
+
+    def _encoding_type(self):
+        encoding_type = super()._encoding_type()
+        if encoding_type == EncodingType.PER_BLOCK:
+            return EncodingType.LPBQ
+        return encoding_type
+
+    def _export_1_0_0_encodings(self) -> Optional[Dict]:
+        encodings = super()._export_1_0_0_encodings()
+        if not encodings:
+            return None
+        assert "block_size" in encodings.keys()
+
+        encodings["compressed_bw"] = self.bitwidth
+        encodings["bw"] = self.decompressed_bw
+        scale, _ = lpbq_utils.encodings_to_scale_offset_arrays(self.get_encodings(), self._encoding_shape())
+        int_scale, per_block_scale = lpbq_utils.grouped_dynamic_quantize(scale, self._block_grouping(), self.decompressed_bw - self.bitwidth)
+        encodings['per_block_int_scale'] = int_scale.flatten().tolist()
+        encodings['scale'] = per_block_scale.flatten().tolist()
+        encodings["offset"] = [-2 ** (self.decompressed_bw - 1) for _ in encodings['scale']]
+
+        return encodings

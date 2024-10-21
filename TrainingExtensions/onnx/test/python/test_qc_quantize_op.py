@@ -43,9 +43,10 @@ import os
 import pytest
 from aimet_common import libpymo
 from aimet_common.defs import QuantScheme, MAP_QUANT_SCHEME_TO_PYMO, MAP_ROUND_MODE_TO_PYMO, QuantizationDataType, EncodingType
-from aimet_onnx.qc_quantize_op import QcQuantizeOp, OpMode, TensorQuantizerParams
+from aimet_onnx.qc_quantize_op import QcQuantizeOp, OpMode, TensorQuantizerParams, GroupedBlockQuantizeDequantize
 from aimet_common import libquant_info
 from aimet_common.quantsim import calculate_delta_offset
+from aimet_onnx import lpbq_utils
 
 
 shared_library = os.path.dirname(libquant_info.__file__)
@@ -895,3 +896,111 @@ class TestBlockwiseQuantizeOp:
         qc_quantize_op.data_type = QuantizationDataType.float
         with pytest.raises(RuntimeError):
             qc_quantize_op.load_encodings([libpymo.TfEncoding()])
+
+class TestLPBQOp:
+
+    def test_lpbq_quantize_op(self):
+        input_shape = (2, 9)
+        scale = np.asarray([
+            [1.6, 1.1222, .00001],
+            [16, 2.56, 4.9],
+        ], np.float32)
+        offset = np.ones_like(scale) * -8
+        expected_lpbq_scale = np.asarray([
+            [1.6, 1.1, .1],
+            [16, 3, 5]
+        ], np.float32)
+        expected_per_channel_scale = np.asarray([1.6 / 2 ** 4, 16 / 2 ** 4])
+        bitwidth = 4
+        decompressed_bw = 8
+        quant_info = libquant_info.QcQuantizeInfo()
+        tensor_quantizer_params = TensorQuantizerParams(input_shape, channel_axis=0, block_axis=1)
+        lpbq_op = GroupedBlockQuantizeDequantize(quant_info,
+                                                 bitwidth,
+                                                 decompressed_bw,
+                                                 block_size=3,
+                                                 quant_scheme=QuantScheme.post_training_tf,
+                                                 op_mode=OpMode.quantizeDequantize,
+                                                 tensor_quantizer_params=tensor_quantizer_params)
+
+        encodings = lpbq_utils.scale_offset_arrays_to_encodings(scale, offset, bitwidth)
+        """
+        When: Load blockwise encodings to an LPBQ quantizer
+        Then: Quantizer should apply LPBQ to encodings during load_encodings
+        """
+        lpbq_op.load_encodings(encodings)
+        lpbq_encodings = lpbq_op.get_encodings()
+        lpbq_scale, lpbq_offset = lpbq_utils.encodings_to_scale_offset_arrays(lpbq_encodings, (2, 3))
+        assert np.allclose(lpbq_scale, expected_lpbq_scale)
+        assert np.allclose(lpbq_offset, offset)
+        """
+        Run LPBQ Quantizer in QDQ mode
+        """
+        session = create_qc_quantize_model_session(quant_info, input_shape)
+        input_tensor = np.random.randn(*input_shape).astype(np.float32)
+        output_tensor = session.run(None, {'input': input_tensor})[0]
+        """
+        Compute the expected LPBQ Output
+        """
+        input_tensor_bcast, scale_bcast = input_tensor.reshape((2, 3, 3)), expected_lpbq_scale.reshape((2, 3, 1))
+        expected_output = (np.round(np.clip(input_tensor_bcast / scale_bcast, -8, 7)) * scale_bcast).reshape(
+            input_shape)
+        """
+        Check that output matches expectation
+        """
+        assert np.allclose(expected_output, output_tensor)
+        """
+        Verify 1.0.0 export logic
+        """
+        exported_encodings = lpbq_op.export_encodings("1.0.0")
+        expected_int_scale = [
+            16, 11, 1,
+            16, 3, 5
+        ]
+        assert exported_encodings.keys() == {"enc_type", "dtype", "bw", "is_sym", "scale", "offset", "block_size",
+                                             "compressed_bw", "per_block_int_scale"}
+
+        assert all(offset == -128 for offset in exported_encodings["offset"])
+        assert exported_encodings["per_block_int_scale"] == expected_int_scale
+        assert exported_encodings["compressed_bw"] == 4
+        assert exported_encodings["bw"] == 8
+        assert exported_encodings["enc_type"] == EncodingType.LPBQ.name
+        assert np.allclose(np.asarray(exported_encodings["scale"]), np.asarray(expected_per_channel_scale))
+        assert exported_encodings["offset"] == [-128, -128]
+
+        with pytest.raises(NotImplementedError):
+            lpbq_op.export_encodings("0.6.1")
+
+    def test_compute_lpbq_encodings(self):
+        input_shape = (4, 2)
+        bitwidth = 4
+        decompressed_bw = 8
+        block_size = 2
+        quant_info = libquant_info.QcQuantizeInfo()
+        tensor_quantizer_params = TensorQuantizerParams(input_shape, channel_axis=1, block_axis=0)
+        lpbq_op = GroupedBlockQuantizeDequantize(quant_info,
+                                                 bitwidth,
+                                                 decompressed_bw,
+                                                 block_size=block_size,
+                                                 quant_scheme=QuantScheme.post_training_tf,
+                                                 op_mode=OpMode.updateStats,
+                                                 tensor_quantizer_params=tensor_quantizer_params)
+
+        # Note: computed delta = abs_max / num_positive_steps = abs_max / 7
+        input_tensor = np.asarray([
+            [7. * 32, -7 * 1.6],
+            [-.35, 7.343],
+            [7. * 13.334, 7 * -1.1112],
+            [22.1, .11233]
+        ], np.float32)
+        expected_scale = np.asarray([
+            [32., 1.6],
+            [14, 1.1]
+        ], np.float32)
+        session = create_qc_quantize_model_session(quant_info, input_shape)
+        session.run(None, {"input": input_tensor})
+        lpbq_op.compute_encodings()
+
+        encodings = lpbq_op.get_encodings()
+        scale, _ = lpbq_utils.encodings_to_scale_offset_arrays(encodings, expected_scale.shape)
+        assert np.allclose(scale, expected_scale)
