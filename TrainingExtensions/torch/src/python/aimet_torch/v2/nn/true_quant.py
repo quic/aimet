@@ -340,6 +340,62 @@ class QuantizationMixin(BaseQuantizationMixin, metaclass=QuantizationMixinMeta):
         """
         return super().from_module(module)
 
+    @classmethod
+    def implements(cls, module_cls):
+        r"""
+        Decorator for registering quantized definition of the given base class.
+
+        Even though AIMET supports quantization of all built-in modules in torch.nn subpackage
+        such as ``torch.nn.Conv2d`` or ``torch.nn.Linear`` that AIMET is already aware of,
+        :class:`QuantizationSimModel` will throw a runtime error when it encounters custom modules
+        defined by the users, asking the users to provide the quantized definition of the custom modules
+        that AIMET doesn't know of.
+
+        To declare the quantized definition of a module, :class:`QuantizationSimModel` requires you
+        to define a subclass of your module decorated with :meth:`implements`,
+        in which you will implement ``__quant_init__`` and ``forward`` methods.
+
+        As an example, given a custom module as below::
+
+            class MaskedAdd(torch.nn.Module):
+               def forward(self, input: torch.Tensor, mask: torch.Tensor, value: torch.Tensor):
+                   return input + mask * value
+
+        its quantized definition should be declared before creating :class:`QuantizationSimModel`, typically as below::
+
+
+            @QuantizationMixin.implements(MaskedAdd)
+            class QuantizedMaskedAdd(QuantizationMixin, MaskedAdd):
+                # The quantized definition of MaskedAdd should be a subclass of
+                # QuantizationMixin and MaskedAdd (Order matters!)
+                def __quant_init__(self):
+                    super().__quant_init__()
+
+                    # Declare the number of input/output quantizers
+                    self.input_quantizers = torch.nn.ModuleList([None, None, None])
+                    self.output_quantizers = torch.nn.ModuleList([None])
+
+               def forward(self, input: torch.Tensor, mask: torch.Tensor, value: torch.Tensor):
+                   input_qtzr  = self.input_quantizers[0]
+                   _           = self.input_quantizers[1] # I don't want to quantize the boolean masks!
+                   value_qtzr  = self.input_quantizers[2]
+                   output_qtzr = self.output_quantizers[0]
+
+                   if input_qtzr is not None:
+                       input = input_qtzr(input)
+
+                   if value_qtzr is not None:
+                       value = value_qtzr(value)
+
+                   output = super().forward(input, mask, value)
+
+                   if output_qtzr is not None:
+                       output = output_qtzr(output)
+
+                   return output
+        """
+        return super().implements(module_cls)
+
 
 # pylint: disable=too-many-ancestors
 
