@@ -55,8 +55,8 @@ from aimet_torch import utils
 from aimet_torch.save_utils import SaveUtils
 from aimet_torch.meta import connectedgraph_utils
 from aimet_torch.v1.quantsim import QuantizationSimModel, QcQuantizeWrapper, ExportableQuantModule
-from aimet_torch.qc_quantize_op import StaticGridQuantWrapper, QcQuantizeOpMode
-from aimet_torch.tensor_quantizer import TensorQuantizer
+from aimet_torch.v1.qc_quantize_op import StaticGridQuantWrapper, QcQuantizeOpMode
+from aimet_torch.v1.tensor_quantizer import TensorQuantizer
 from aimet_torch.v1.adaround.adaround_wrapper import AdaroundWrapper
 from aimet_torch.v1.adaround.adaround_optimizer import AdaroundOptimizer
 from aimet_torch.v1.adaround.adaround_loss import AdaroundHyperParameters

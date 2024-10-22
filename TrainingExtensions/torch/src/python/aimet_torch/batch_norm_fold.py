@@ -56,8 +56,8 @@ from aimet_torch.defs import PassThroughOp
 from aimet_torch import utils
 from aimet_torch.meta.connectedgraph import ConnectedGraph
 from aimet_torch.v1.quantsim import QuantizationSimModel
-from aimet_torch.qc_quantize_op import QcQuantizeWrapper
-from aimet_torch.tensor_quantizer import LearnedGridTensorQuantizer
+from aimet_torch.v1.qc_quantize_op import QcQuantizeWrapper
+from aimet_torch.v1.tensor_quantizer import LearnedGridTensorQuantizer
 
 _logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.BatchNormFolding)
 

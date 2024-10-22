@@ -56,8 +56,8 @@ from aimet_torch.utils import CachedDataset, get_ordered_list_of_modules, in_eva
     change_tensor_device_placement, get_device
 from aimet_torch.v1.adaround.activation_sampler import create_modulelist_for_group_modules,\
     get_block_inputs, get_block_outputs
-from aimet_torch.qc_quantize_op import QcQuantizeWrapper, QcQuantizeOpMode
-from aimet_torch.tensor_quantizer import TensorQuantizer, StaticGridPerTensorQuantizer, StaticGridPerChannelQuantizer
+from aimet_torch.v1.qc_quantize_op import QcQuantizeWrapper, QcQuantizeOpMode
+from aimet_torch.v1.tensor_quantizer import TensorQuantizer, StaticGridPerTensorQuantizer, StaticGridPerChannelQuantizer
 from aimet_torch.v1.quantsim import QuantizationSimModel
 
 # The following modules with weights are supported

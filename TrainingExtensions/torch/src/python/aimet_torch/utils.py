@@ -61,7 +61,7 @@ from aimet_common.utils import AimetLogger, Handle, log_with_error_and_assert_if
 from aimet_common.utils import profile as _profile, deprecated, _red # pylint:disable = unused-import
 import aimet_common.libpymo as libpymo
 import aimet_torch.v1.nn.modules.custom as aimet_modules
-from aimet_torch.tensor_quantizer import TensorQuantizer, StaticGridPerChannelQuantizer, StaticGridPerTensorQuantizer # pylint:disable = cyclic-import
+from aimet_torch.v1.tensor_quantizer import TensorQuantizer, StaticGridPerChannelQuantizer, StaticGridPerTensorQuantizer # pylint:disable = cyclic-import
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Utils)
 
@@ -955,8 +955,8 @@ def get_all_quantizers(model: torch.nn.Module):
     """
     # pylint:disable = cyclic-import
     from aimet_torch.v2.nn.base import BaseQuantizationMixin# pylint: disable=import-outside-toplevel
-    from aimet_torch.qc_quantize_op import QcQuantizeWrapper# pylint: disable=import-outside-toplevel
-    from aimet_torch.qc_quantize_recurrent import QcQuantizeRecurrent# pylint: disable=import-outside-toplevel
+    from aimet_torch.v1.qc_quantize_op import QcQuantizeWrapper# pylint: disable=import-outside-toplevel
+    from aimet_torch.v1.qc_quantize_recurrent import QcQuantizeRecurrent# pylint: disable=import-outside-toplevel
 
     for m in model.modules():
         if isinstance(m, BaseQuantizationMixin):
@@ -1300,6 +1300,16 @@ def compute_partial_encoding(quantizer: TensorQuantizer, encoding_dict: Dict) ->
     encoding_dict['is_symmetric'] = 'True' if quantizer.use_symmetric_encodings else 'False'
 
     return encoding_dict
+
+
+def _warn_deprecated_in_v2(name: str, v1_legacy_api: str = None):
+    msg = f"\"{name}\" will be deprecated soon in the later versions."
+
+    if v1_legacy_api:
+        msg += f" If you must keep using the v1 legacy API for backwards-compatibility,"\
+               f" please import \"{v1_legacy_api}\" instead."
+
+    warnings.warn(_red(msg), DeprecationWarning, stacklevel=3)
 
 
 def _warn_replaced_in_v2(name: str, v2_new_api: str, v1_legacy_api: str = None):

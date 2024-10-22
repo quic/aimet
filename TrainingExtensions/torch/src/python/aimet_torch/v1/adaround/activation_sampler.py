@@ -44,7 +44,7 @@ from torch.utils.data import Dataset
 from aimet_common.utils import AimetLogger
 from aimet_torch.utils import CachedDataset, ModuleData, get_named_module, cache_intermediate_datasets,\
     change_tensor_device_placement, in_eval_mode, save_to_cache, get_ordered_list_of_modules
-from aimet_torch.qc_quantize_op import QcQuantizeWrapper
+from aimet_torch.v1.qc_quantize_op import QcQuantizeWrapper
 from aimet_torch.v1.quantsim import QuantizationSimModel
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)

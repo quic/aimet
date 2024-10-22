@@ -45,11 +45,11 @@ import pytest
 import torch
 
 from aimet_common.defs import MAP_ROUND_MODE_TO_PYMO, QuantizationDataType
-from aimet_torch.qc_quantize_op import QuantScheme
-from aimet_torch.qc_quantize_op import StaticGridQuantWrapper, LearnedGridQuantWrapper, SteGatingFuncForParameters, \
+from aimet_torch.v1.qc_quantize_op import QuantScheme
+from aimet_torch.v1.qc_quantize_op import StaticGridQuantWrapper, LearnedGridQuantWrapper, SteGatingFuncForParameters, \
     QcQuantizeOpMode
-from aimet_torch.tensor_quantizer import LearnedGridTensorQuantizer
-from aimet_torch.tensor_quantizer import StaticGridPerTensorQuantizer, QuantizeDequantizeFunc
+from aimet_torch.v1.tensor_quantizer import LearnedGridTensorQuantizer
+from aimet_torch.v1.tensor_quantizer import StaticGridPerTensorQuantizer, QuantizeDequantizeFunc
 from aimet_torch import utils
 import aimet_torch.v1.nn.modules.custom as aimet_modules
 

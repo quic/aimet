@@ -57,7 +57,7 @@ from aimet_torch.model_preparer import prepare_model
 from aimet_torch.batch_norm_fold import fold_all_batch_norms
 from aimet_torch.amp import utils as mixed_precision_utils
 from aimet_torch.amp.mixed_precision_algo import EvalCallbackFactory
-from aimet_torch.qc_quantize_op import QcQuantizeWrapper
+from aimet_torch.v1.qc_quantize_op import QcQuantizeWrapper
 from aimet_common.amp.utils import AMPSearchAlgo, calculate_starting_bit_ops
 
 def get_config(config_dir: str):

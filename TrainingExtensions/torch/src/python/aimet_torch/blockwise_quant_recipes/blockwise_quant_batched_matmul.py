@@ -44,10 +44,10 @@ import aimet_common.AimetTensorQuantizer as AimetTensorQuantizer
 import aimet_common.libpymo as libpymo
 from aimet_common.defs import QuantScheme, QuantizationDataType, MAP_QUANT_SCHEME_TO_PYMO
 from aimet_torch import utils
-from aimet_torch.qc_quantize_op import QcQuantizeWrapper
+from aimet_torch.v1.qc_quantize_op import QcQuantizeWrapper
 from aimet_torch.v1.quantsim import QuantizationSimModel
-from aimet_torch.quantsim_straight_through_grad import get_computed_encodings
-from aimet_torch.tensor_quantizer import StaticGridTensorQuantizer, StaticGridPerChannelQuantizer
+from aimet_torch.v1.quantsim_straight_through_grad import get_computed_encodings
+from aimet_torch.v1.tensor_quantizer import StaticGridTensorQuantizer, StaticGridPerChannelQuantizer
 
 
 class ReduceSum(torch.nn.Module):

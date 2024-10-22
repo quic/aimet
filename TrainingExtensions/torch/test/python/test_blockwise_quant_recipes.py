@@ -45,7 +45,7 @@ import tempfile
 import pytest
 import torch
 from aimet_torch.v1.quantsim import QuantizationSimModel
-from aimet_torch.qc_quantize_op import QcQuantizeWrapper
+from aimet_torch.v1.qc_quantize_op import QcQuantizeWrapper
 from aimet_torch.blockwise_quant_recipes import blockwise_quant_batched_matmul as bqbm
 from aimet_torch.blockwise_quant_recipes import blockwise_quant_grouped_conv as bqgc
 from aimet_torch.blockwise_quant_recipes import blockwise_quant_tensor_split as bqts

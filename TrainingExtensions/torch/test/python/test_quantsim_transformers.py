@@ -55,7 +55,7 @@ from aimet_torch.transformers.activation import create_quantizable_transformer_e
     create_quantizable_transformer_decoder_layer, create_quantizable_multihead_attention, QuantizableMultiheadAttention
 from aimet_torch.utils import create_rand_tensors_given_shapes, replace_modules_of_type1_using_constructor
 from aimet_torch.meta import connectedgraph_utils
-from aimet_torch.qc_quantize_op import StaticGridQuantWrapper, StaticGridPerTensorQuantizer
+from aimet_torch.v1.qc_quantize_op import StaticGridQuantWrapper, StaticGridPerTensorQuantizer
 from aimet_torch.v1.quantsim import QuantizationSimModel
 from aimet_torch import utils
 #TODO: import libpymo from aimet_common
