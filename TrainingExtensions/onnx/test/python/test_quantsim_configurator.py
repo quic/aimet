@@ -37,6 +37,7 @@
 import json
 import os
 from aimet_common.defs import QuantizationDataType
+from aimet_common.quantsim_config.utils import get_path_for_per_channel_config
 from aimet_onnx.quantsim import QuantizationSimModel
 from models import models_for_tests
 
@@ -394,3 +395,9 @@ class TestQuantSimConfig:
         supported_kernels_conv = sim.get_supported_kernels()["Conv"]
         assert len(supported_kernels_conv) == 1
         assert supported_kernels_conv == expected_supported_kernels
+
+
+    def test_matmul_perchannel_config(self, tmp_path):
+        model = models_for_tests.weight_matmul_model(in_features=10, out_features=20)
+        sim = QuantizationSimModel(model, config_file=get_path_for_per_channel_config())
+        assert not sim.qc_quantize_op_dict["weight"].quant_info.usePerChannelMode
