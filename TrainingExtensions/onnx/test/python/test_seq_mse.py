@@ -335,7 +335,6 @@ def test_dependency_graph():
                                default_activation_bw=8,
                                default_param_bw=4,
                                use_cuda=False,
-                               simplify_model=False,
                                config_file=_get_config_file(is_symmetric=True, strict_symmetric=False,
                                                             unsigned_symmetric=False, pcq=True))
     seq_params = SeqMseParams()
@@ -366,7 +365,6 @@ def test_residual_model_dependency_graph():
                                default_activation_bw=8,
                                default_param_bw=4,
                                use_cuda=False,
-                               simplify_model=False,
                                config_file=_get_config_file(is_symmetric=True, strict_symmetric=False,
                                                             unsigned_symmetric=False, pcq=True))
     seq_params = SeqMseParams()
@@ -406,6 +404,7 @@ def test_residual_model_dependency_graph():
 @pytest.mark.parametrize("enable_pcq", [True, False])
 def test_apply_seq_mse_for_residual_model(inp_symmetry, param_bw, loss_fn, enable_pcq):
     model = single_residual_model()
+    onnx.save(model.model, 'model.onnx')
     sim = QuantizationSimModel(model=copy.deepcopy(model),
                                quant_scheme=QuantScheme.post_training_tf,
                                default_activation_bw=8,
@@ -420,8 +419,8 @@ def test_apply_seq_mse_for_residual_model(inp_symmetry, param_bw, loss_fn, enabl
     seq_mse = SequentialMse(model, sim, seq_params, dataloader)
     seq_mse.apply_seq_mse_algo()
 
-    weight_quantizer_conv_1 = seq_mse.sim.qc_quantize_op_dict['onnx::Conv_41']
-    weight_quantizer_conv_2 = seq_mse.sim.qc_quantize_op_dict['onnx::Conv_44']
+    weight_quantizer_conv_1 = seq_mse.sim.qc_quantize_op_dict['onnx::Conv_45']
+    weight_quantizer_conv_2 = seq_mse.sim.qc_quantize_op_dict['onnx::Conv_48']
     weight_quantizer_conv_3 = seq_mse.sim.qc_quantize_op_dict['conv3.weight']
     weight_quantizer_conv_4 = seq_mse.sim.qc_quantize_op_dict['conv4.weight']
     weight_quantizer_fc = seq_mse.sim.qc_quantize_op_dict['fc.weight']
