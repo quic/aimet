@@ -44,6 +44,7 @@ import numpy as np
 import torch
 from onnxruntime import SessionOptions, GraphOptimizationLevel, InferenceSession
 import pytest
+from onnxsim import simplify
 
 from aimet_common.quantsim_config.utils import get_path_for_per_channel_config
 from aimet_common import libquant_info
@@ -213,6 +214,7 @@ class TestAdaround:
                                     forward_fn=callback,
                                     forward_pass_callback_args=None)
 
+        model, _ = simplify(model)
         Adaround.apply_adaround(model, params, tmpdir, 'dummy', use_cuda=False)
 
     @pytest.mark.parametrize("model_factory, input_shape", [(models_for_tests.pointwise_conv1d, (1, 10, 32)),
