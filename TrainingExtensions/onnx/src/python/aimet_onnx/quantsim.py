@@ -48,7 +48,6 @@ import numpy as np
 import onnx
 
 from onnx import helper
-from onnxsim import simplify
 import onnxruntime as ort
 from onnxruntime import SessionOptions, GraphOptimizationLevel, InferenceSession
 from onnxruntime.quantization.onnx_quantizer import ONNXModel
@@ -143,7 +142,7 @@ class QuantizationSimModel:
 
     # pylint: disable=too-many-arguments, too-many-locals, too-many-instance-attributes
     def __init__(self,
-                 model: ModelProto|str,
+                 model: ModelProto,
                  dummy_input: Dict[str, np.ndarray] = None,
                  quant_scheme: QuantScheme = QuantScheme.post_training_tf_enhanced,
                  rounding_mode: str = 'nearest',
@@ -156,7 +155,7 @@ class QuantizationSimModel:
         """
         Constructor
 
-        :param model: ONNX model or path to model. Passing model path instead of model, will save memory equal to size of the model.
+        :param model: ONNX model
         :param dummy_input: Dummy input to the model. If None, will attempt to auto-generate a dummy input
         :param quant_scheme: Quantization scheme (e.g. QuantScheme.post_training_tf)
         :param rounding_mode: Rounding mode (e.g. nearest)
@@ -173,19 +172,9 @@ class QuantizationSimModel:
         :param user_onnx_libs: List of paths to all compiled ONNX custom ops libraries
         :param path: Directory to save the artifacts.
         """
-        if simplify_model:
-            try:
-                model = model.model if isinstance(model, ONNXModel) else model
-                model, _ = simplify(model)
-            # pylint: disable=bare-except
-            except:
-                logger.info('ONNX Simplifier failed. Proceeding with unsimplified model.')
-
-        #Load model in case it didn't simplify and was passed as path string
-        self.model = onnx.load_model(model) if isinstance(model, str) else model
-        if not isinstance(self.model, ONNXModel):
-            self.model = ONNXModel(self.model)
-
+        self.model = model
+        if not isinstance(model, ONNXModel):
+            self.model = ONNXModel(model)
         if not dummy_input:
             dummy_input = make_dummy_input(self.model.model)
         self.qc_quantize_op_dict = {}
