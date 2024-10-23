@@ -13,8 +13,9 @@ Top-level API
 
 |
 
-**Note about Quantization Schemes** : Since ONNX Runtime will be used for optimized inference only, ONNX
-framework will support Post Training Quantization schemes i.e. TF or TF-enhanced to compute the encodings.
+**Note** :
+ - It is recommended to use onnx-simplifier before creating quantsim model.
+ - Since ONNX Runtime will be used for optimized inference only, ONNX framework will support Post Training Quantization schemes i.e. TF or TF-enhanced to compute the encodings.
 
 **The following API can be used to Compute Encodings for Model**
 
@@ -37,7 +38,7 @@ Code Examples
 
 .. literalinclude:: ../onnx_code_examples/quantization.py
     :language: python
-    :lines: 39-41
+    :lines: 39-42
 
 **User should write this function to pass calibration data**
 

@@ -11,6 +11,9 @@ Top-level API
 
 |
 
+**Note:** It is recommended to use onnx-simplifier before applying mixed-precision.
+
+
 Quantizer Groups definition
 ===========================
 .. autoclass:: aimet_onnx.amp.quantizer_groups.QuantizerGroup

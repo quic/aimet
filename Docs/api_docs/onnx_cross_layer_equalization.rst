@@ -31,6 +31,9 @@ Note: High Bias fold will not happen when the below API is used, if the model do
 
 |
 
+**Note:** It is recommended to use onnx-simplifier before applying cross layer equalization.
+
+
 Code Example
 ============
 
@@ -38,7 +41,7 @@ Code Example
 
 .. literalinclude:: ../onnx_code_examples/cross_layer_equalization.py
     :language: python
-    :lines: 39
+    :lines: 39-40
 
 
 **Cross Layer Equalization in auto mode**

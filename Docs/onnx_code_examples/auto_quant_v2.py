@@ -40,6 +40,7 @@
 import math
 import onnxruntime as ort
 import numpy as np
+from onnxsim import simplify
 
 from aimet_onnx.auto_quant_v2 import AutoQuant
 from aimet_onnx.adaround.adaround_weight import AdaroundParameters
@@ -51,6 +52,8 @@ BATCH_SIZE = 32
 
 # Step 2. Prepare model and dataloader
 onnx_model = Model()
+# Simplify the model
+onnx_model, _ = simplify(onnx_model)
 
 input_shape = (1, 3, 224, 224)
 dummy_data = np.random.randn(*input_shape).astype(np.float32)

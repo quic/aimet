@@ -48,7 +48,6 @@ import numpy as np
 import onnx
 
 from onnx import helper
-from onnxsim import simplify
 import onnxruntime as ort
 from onnxruntime import SessionOptions, GraphOptimizationLevel, InferenceSession
 from onnxruntime.quantization.onnx_quantizer import ONNXModel
@@ -152,11 +151,11 @@ class QuantizationSimModel:
                  use_symmetric_encodings: bool = False, use_cuda: bool = True,
                  device: int = 0, config_file: str = None,
                  default_data_type: QuantizationDataType = QuantizationDataType.int,
-                 simplify_model: bool = True, user_onnx_libs: List[str] = None, path: str = None):
+                 user_onnx_libs: List[str] = None, path: str = None):
         """
         Constructor
 
-        :param model: ONNX model or path to model
+        :param model: ONNX model
         :param dummy_input: Dummy input to the model. If None, will attempt to auto-generate a dummy input
         :param quant_scheme: Quantization scheme (e.g. QuantScheme.post_training_tf)
         :param rounding_mode: Rounding mode (e.g. nearest)
@@ -169,21 +168,12 @@ class QuantizationSimModel:
                                  Possible options are QuantizationDataType.int and QuantizationDataType.float.
                                  Note that the mode default_data_type=QuantizationDataType.float is only supported with
                                  default_output_bw=16 and default_param_bw=16
-        :param simplify_model: Default True, uses onnx simplifier to simplify model
         :param user_onnx_libs: List of paths to all compiled ONNX custom ops libraries
         :param path: Directory to save the artifacts.
         """
         self.model = model
         if not isinstance(model, ONNXModel):
             self.model = ONNXModel(model)
-
-        if simplify_model:
-            try:
-                self.model.model, _ = simplify(self.model.model)
-            # pylint: disable=bare-except
-            except:
-                logger.info('ONNX Simplifier failed. Proceeding with unsimplified model.')
-
         if not dummy_input:
             dummy_input = make_dummy_input(self.model.model)
         self.qc_quantize_op_dict = {}

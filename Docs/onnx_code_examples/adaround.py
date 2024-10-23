@@ -38,6 +38,7 @@
 
 """ AdaRound code example to be used for documentation generation. """
 
+from onnxsim import simplify
 from aimet_onnx.adaround.adaround_weight import AdaroundParameters, Adaround
 from aimet_onnx.quantsim import QuantizationSimModel
 
@@ -56,6 +57,9 @@ def apply_adaround_example(model, dataloader):
         Example code to run adaround
 
         """
+        # Simplify the model
+        model, _ = simplify(model)
+
         params = AdaroundParameters(data_loader=dataloader, num_batches=1, default_num_iterations=5,
                                     forward_fn=pass_calibration_data,
                                     forward_pass_callback_args=None)

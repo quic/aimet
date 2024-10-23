@@ -44,7 +44,6 @@ import json
 from typing import Tuple, Dict, List, Callable
 from onnx import onnx_pb
 from onnxruntime.quantization.onnx_quantizer import ONNXModel
-import onnxsim
 from tqdm import tqdm
 
 # Import AIMET specific modules
@@ -146,20 +145,11 @@ class Adaround:
         if not isinstance(model, ONNXModel):
             model = ONNXModel(model)
 
-        # TODO: Remove this once we no longer simplify the model within quantsim
-
-        try:
-            model.model, _ = onnxsim.simplify(model.model)
-            # pylint: disable=bare-except
-        except:
-            logger.info('ONNX Simplifier failed. Proceeding with unsimplified model.')
-            
         quant_sim = QuantizationSimModel(copy.deepcopy(model), quant_scheme=default_quant_scheme,
                                          default_param_bw=default_param_bw,
                                          config_file=default_config_file,
                                          user_onnx_libs=user_onnx_libs,
-                                         use_cuda=use_cuda,
-                                         simplify_model=False)
+                                         use_cuda=use_cuda)
 
         # For the params in the param_bw_override_list, override the default parameter bitwidths in the QuantSim
         if param_bw_override_list:

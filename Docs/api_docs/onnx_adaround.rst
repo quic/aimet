@@ -21,6 +21,9 @@ Adaround Parameters
     :members:
 
 
+**Note:** It is recommended to use onnx-simplifier before adarounding the model.
+
+
 Code Example - Adaptive Rounding (AdaRound)
 ===========================================
 
@@ -30,7 +33,7 @@ This example shows how to use AIMET to perform Adaptive Rounding (AdaRound).
 
 .. literalinclude:: ../onnx_code_examples/adaround.py
     :language: python
-    :lines: 41-42
+    :lines: 41-43
 
 **User should write this function to pass calibration data**
 

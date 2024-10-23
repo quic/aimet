@@ -16,6 +16,10 @@ Top-level API
     :members:
     :member-order: bysource
 
+
+**Note:** It is recommended to use onnx-simplifier before applying auto-quant.
+
+
 Code Examples
 ===============
 .. literalinclude:: ../onnx_code_examples/auto_quant_v2.py
