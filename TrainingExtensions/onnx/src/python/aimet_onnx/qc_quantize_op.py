@@ -36,7 +36,7 @@
 # =============================================================================
 """ Custom QcQuantizeOp to quantize weights and activations using ONNXRuntime """
 
-from typing import Union, List, Optional, Dict
+from typing import Union, List, Optional, Dict, Tuple
 import numpy as np
 
 import aimet_common.libpymo as libpymo
@@ -44,7 +44,7 @@ from aimet_common.libpymo import TensorQuantizerOpMode
 from aimet_common.defs import QuantScheme, MAP_QUANT_SCHEME_TO_PYMO, MAP_ROUND_MODE_TO_PYMO, QuantizationDataType, EncodingType
 from aimet_common import libquant_info
 from aimet_common.utils import deprecated
-from aimet_common.quantsim import calculate_delta_offset
+from aimet_common.quantsim import calculate_delta_offset, create_encoding_from_min_max
 from aimet_onnx import lpbq_utils
 
 
@@ -101,6 +101,7 @@ class QcQuantizeOp:
         self._data_type = QuantizationDataType.int
         self.tensor_quantizer_params = tensor_quantizer_params
         self._reset_encodings()
+        self._encoding_min_max_fixed_vals = None
 
     def is_encoding_frozen(self) -> bool:
         """ Returns is_encoding_frozen var """
@@ -410,17 +411,23 @@ class QcQuantizeOp:
         """
         Compute and return encodings of each tensor quantizer
         """
-        if not self._is_encoding_frozen:
-            if self.enabled:
-                encodings = []
-                for tensor_quantizer in self._tensor_quantizer:
-                    encodings.append(tensor_quantizer.computeEncoding(self.bitwidth, self.use_symmetric_encodings))
-                self.load_encodings(encodings)
-            else:
-                encodings = None
+        if self._is_encoding_frozen:
+            return None
 
-            return encodings
-        return None
+        if not self.enabled:
+            return None
+
+        encodings = []
+        for tensor_quantizer in self._tensor_quantizer:
+            if self._encoding_min_max_fixed_vals is None:
+                encodings.append(tensor_quantizer.computeEncoding(self.bitwidth, self.use_symmetric_encodings))
+            else:
+                min_val, max_val = self._encoding_min_max_fixed_vals
+                encodings.append(create_encoding_from_min_max(min_val, max_val, self.bitwidth, self.use_symmetric_encodings,
+                                                              self.use_strict_symmetric))
+
+        self.load_encodings(encodings)
+        return encodings
 
     def get_stats_histogram(self) -> List[List]:
         """
@@ -566,6 +573,14 @@ class QcQuantizeOp:
                 is_clipped = True
 
         return is_clipped
+
+    def set_fixed_encoding_range(self, fixed_range: Tuple[float, float]):
+        """
+        Set the min/max values to be used when computing encodings
+
+        :param fixed_range: Tuple of (min, max) value to use in-place of observer statistics when computing encodings
+        """
+        self._encoding_min_max_fixed_vals = fixed_range
 
 
 class GroupedBlockQuantizeDequantize(QcQuantizeOp):

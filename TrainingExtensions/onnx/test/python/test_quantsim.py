@@ -1344,6 +1344,59 @@ class TestQuantSim:
             assert quantizer.quant_info.blockSize == 0
             assert not quantizer.quant_info.isIntDataType
 
+    def test_encoding_constraints(self, tmp_path):
+        quantsim_config = {
+            "defaults":
+                {
+                    "ops":
+                        {
+                            "is_output_quantized": "True"
+                        },
+                    "params":
+                        {
+                            "is_quantized": "True",
+                            "is_symmetric": "True"
+                        },
+                    "per_channel_quantization": "False",
+                    "strict_symmetric": "False",
+                    "unsigned_symmetric": "False"
+                },
+            "params": {},
+            "op_type": {
+                "Softmax":
+                    {
+                        "encoding_constraints":
+                            {
+                                "min": 0.0,
+                                "max": 1.0
+                            }
+                    },
+                "Sigmoid":
+                    {
+                        "encoding_constraints":
+                            {
+                                "min": 0.0,
+                                "max": 2.0
+                            }
+                    },
+            },
+            "supergroups": [],
+            "model_input": {},
+            "model_output": {}
+        }
+        config_name = os.path.join(tmp_path, 'quantsim_config.json')
+        with open(config_name, 'w') as f:
+            json.dump(quantsim_config, f)
+        model = models_for_tests.softmax_model()
+        sim = QuantizationSimModel(model, config_file=config_name)
+        sim.compute_encodings(lambda sess, _: sess.run(None, make_dummy_input(model)), None)
+        assert sim.qc_quantize_op_dict['model_output'].encodings[0].max == 2.0
+        assert sim.qc_quantize_op_dict['model_output'].encodings[0].min == 0.0
+        assert sim.qc_quantize_op_dict['softmax.output'].encodings[0].max == 1.0
+        assert sim.qc_quantize_op_dict['softmax.output'].encodings[0].min == 0.0
+        assert sim.qc_quantize_op_dict['matmul.output'].encodings[0].max not in (1.0, 2.0)
+        assert sim.qc_quantize_op_dict['matmul.output'].encodings[0].min != 0.0
+
 
 class TestEncodingPropagation:
 
