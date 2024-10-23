@@ -327,3 +327,55 @@ def conv_relu_model():
 
     model = load_model('./conv_relu.onnx')
     return model
+
+
+class SingleLinearLayerModel(nn.Module):
+
+    def __init__(self, input_dim, output_dim):
+        super(SingleLinearLayerModel, self).__init__()
+        self.fc = nn.Linear(input_dim, output_dim)
+
+    def forward(self, x):
+        x = self.fc(x)
+        return x
+
+
+def single_linear_layer_model():
+    model = SingleLinearLayerModel(100,100)
+    x = torch.randn(1, 100, 100, requires_grad=True)
+    torch.onnx.export(model,  # model being run
+                      x,  # model input (or a tuple for multiple inputs)
+                      "./single_linear_layer_model.onnx",  # where to save the model (can be a file or file-like object)
+                      training=torch.onnx.TrainingMode.EVAL,  # whether to execute constant folding for optimization
+                      input_names=['input'],  # the model's input names
+                      output_names=['output'])
+
+    model = ONNXModel(load_model('./single_linear_layer_model.onnx'))
+    return model
+
+class SingleConvLayerModel(nn.Module):
+
+    def __init__(self, input_channel, output_channel):
+        super(SingleConvLayerModel, self).__init__()
+        self.conv = nn.Conv2d(input_channel, output_channel, kernel_size=5)
+
+    def forward(self, x):
+        x = torch.nn.functional.relu(self.conv(x))
+        return x
+
+
+def single_conv_layer_model():
+    model = SingleConvLayerModel(5,10)
+    x = torch.randn(1, 5, 5, 5, requires_grad=True)
+    torch.onnx.export(model,  # model being run
+                      x,  # model input (or a tuple for multiple inputs)
+                      "./single_conv_layer_model.onnx",  # where to save the model (can be a file or file-like object)
+                      training=torch.onnx.TrainingMode.EVAL,  # whether to execute constant folding for optimization
+                      input_names=['input'],  # the model's input names
+                      output_names=['output'])
+
+    model = ONNXModel(load_model('./single_conv_layer_model.onnx'))
+    return model
+
+
+

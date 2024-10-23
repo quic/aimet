@@ -35,6 +35,7 @@
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
 """ Utility functions for ONNX """
+import copy
 import itertools
 from typing import Dict, List, Union, Tuple
 import os
@@ -68,13 +69,17 @@ def remove_nodes_with_type(node_type: str, onnx_graph: onnx.GraphProto):
 
     """
     input_output_pairs = {}
-    for node in onnx_graph.node:
+
+    onnx_graph_node_list = copy.deepcopy(onnx_graph.node)
+
+    for node in onnx_graph_node_list:
         if node.op_type == node_type:
             input_output_pairs[node.output[0]] = node.input[0]
             onnx_graph.node.remove(node)
     for node in onnx_graph.node:
-        if node.input[0] in input_output_pairs.keys():
-            node.input[0] = input_output_pairs[node.input[0]]
+        for i in range(len(node.input)):
+            if node.input[i] in input_output_pairs.keys():
+                node.input[i] = input_output_pairs[node.input[i]]
         for outputs in onnx_graph.output:
             if outputs.name in input_output_pairs.keys() and \
                     node.output[0] == input_output_pairs[outputs.name]:
