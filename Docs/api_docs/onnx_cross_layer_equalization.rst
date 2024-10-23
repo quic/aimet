@@ -31,8 +31,7 @@ Note: High Bias fold will not happen when the below API is used, if the model do
 
 |
 
-**Note** :
- - It is recommended to use onnx-simplifier before applying cross layer equalization.
+**Note:** It is recommended to use onnx-simplifier before applying cross layer equalization.
 
 
 Code Example

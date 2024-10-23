@@ -11,8 +11,7 @@ Top-level API
 
 |
 
-**Note** :
- - It is recommended to use onnx-simplifier before applying mixed-precision.
+**Note:** It is recommended to use onnx-simplifier before applying mixed-precision.
 
 
 Quantizer Groups definition

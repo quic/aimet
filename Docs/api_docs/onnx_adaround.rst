@@ -21,8 +21,7 @@ Adaround Parameters
     :members:
 
 
-**Note** :
- - It is recommended to use onnx-simplifier before adarounding the model.
+**Note:** It is recommended to use onnx-simplifier before adarounding the model.
 
 
 Code Example - Adaptive Rounding (AdaRound)

@@ -19,8 +19,7 @@ Top-level API
 .. automethod:: aimet_onnx.quant_analyzer.QuantAnalyzer.analyze
 
 
-**Note** :
- - It is recommended to use onnx-simplifier before applying quant-analyzer.
+**Note:** It is recommended to use onnx-simplifier before applying quant-analyzer.
 
 
 Run specific utility
