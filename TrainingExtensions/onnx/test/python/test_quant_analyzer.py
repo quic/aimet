@@ -353,7 +353,7 @@ class TestQuantAnalyzer:
             layer_names.append(node.name)
 
         fold_all_batch_norms_to_weight(model)
-        sim = QuantizationSimModel(copy.deepcopy(model), dummy_input_dict, simplify_model=False)
+        sim = QuantizationSimModel(copy.deepcopy(model), dummy_input_dict)
         sim.compute_encodings(evaluate, dummy_input_dict)
         forward_pass_callback = CallbackFunc(calibrate, dummy_input_dict)
         eval_callback = CallbackFunc(evaluate, dummy_input_dict)
@@ -381,7 +381,7 @@ class TestQuantAnalyzer:
         model = models_for_tests._convert_to_onnx(models_for_tests.TinyModel(), dummy_input)
         dummy_input_dict = {'input': np.random.randn(1, 3, 32, 32).astype(np.float32)}
         fold_all_batch_norms_to_weight(model)
-        sim = QuantizationSimModel(copy.deepcopy(model), dummy_input_dict, simplify_model=False)
+        sim = QuantizationSimModel(copy.deepcopy(model), dummy_input_dict)
         sim.compute_encodings(evaluate, dummy_input_dict)
         forward_pass_callback = CallbackFunc(calibrate, dummy_input_dict)
         eval_callback = CallbackFunc(evaluate, dummy_input_dict)

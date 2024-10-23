@@ -149,8 +149,7 @@ class Adaround:
                                          default_param_bw=default_param_bw,
                                          config_file=default_config_file,
                                          user_onnx_libs=user_onnx_libs,
-                                         use_cuda=use_cuda,
-                                         simplify_model=False)
+                                         use_cuda=use_cuda)
 
         # For the params in the param_bw_override_list, override the default parameter bitwidths in the QuantSim
         if param_bw_override_list:

@@ -47,6 +47,7 @@ from onnx import load_model
 import onnx
 import onnxruntime as ort
 import pytest
+from onnxsim import simplify
 
 from aimet_common import quantsim
 from aimet_common import libquant_info
@@ -320,7 +321,7 @@ class TestQuantSim:
     def test_single_residual(self):
         model = single_residual_model().model
         with tempfile.TemporaryDirectory() as tempdir:
-            sim = QuantizationSimModel(model, use_cuda=False, simplify_model=False, path=tempdir)
+            sim = QuantizationSimModel(model, use_cuda=False, path=tempdir)
             for quantizer in sim.qc_quantize_op_dict:
                 sim.qc_quantize_op_dict[quantizer].enabled = True
 
@@ -781,7 +782,7 @@ class TestQuantSim:
     def test_op_params_to_ignore(self):
         model = models_for_tests.resize_op_model()
         with tempfile.TemporaryDirectory() as tempdir:
-            sim = QuantizationSimModel(model, path=tempdir, simplify_model=False)
+            sim = QuantizationSimModel(model, path=tempdir)
             # params of specific ops shouldn't be quantized (here resize op param is testified)
             assert not sim.qc_quantize_op_dict.get('const_scale', None)
 
@@ -1026,7 +1027,7 @@ class TestQuantSim:
                                        models_for_tests.pointwise_conv3d((1, 64, 32, 32, 4))))
     def test_blockwise_quantization_conv(self, model):
         block_size = 16
-        sim = QuantizationSimModel(model, simplify_model=False)
+        sim = QuantizationSimModel(model)
         set_blockwise_quantization_for_weights(sim, "Conv", 4, True, block_size=block_size, strict=True)
         dummy_input = make_dummy_input(model)
 
@@ -1043,7 +1044,7 @@ class TestQuantSim:
                                        models_for_tests.pointwise_convtranspose3d((1, 64, 32, 32, 4))))
     def test_blockwise_quantization_convtranspose(self, model):
         block_size = 16
-        sim = QuantizationSimModel(model, simplify_model=False)
+        sim = QuantizationSimModel(model)
         set_blockwise_quantization_for_weights(sim, "ConvTranspose", 4, True, block_size=block_size, strict=True)
         dummy_input = make_dummy_input(model)
 
@@ -1063,7 +1064,7 @@ class TestQuantSim:
         input_features = model.graph.input[0].type.tensor_type.shape.dim[-1].dim_value
         output_features = model.graph.output[0].type.tensor_type.shape.dim[-1].dim_value
         transposed_weight = model.graph.initializer[0].dims[0] == output_features
-        sim = QuantizationSimModel(model, simplify_model=False)
+        sim = QuantizationSimModel(model)
         set_blockwise_quantization_for_weights(sim, ("MatMul", "Gemm"), 4, True, block_size=block_size, strict=True)
         dummy_input = make_dummy_input(model)
 
@@ -1080,7 +1081,7 @@ class TestQuantSim:
     def test_blockwise_quantization_with_dynamic_matmul(self):
         block_size = 2
         model = models_for_tests.dynamic_matmul_model(batch_size=1)
-        sim = QuantizationSimModel(model, simplify_model=False)
+        sim = QuantizationSimModel(model)
         set_blockwise_quantization_for_weights(sim, ("MatMul", "Gemm"), 4, True, block_size=block_size)
 
         assert sim.qc_quantize_op_dict["linear.weight"].quant_info.blockSize == 2
@@ -1440,6 +1441,8 @@ class TestEncodingPropagation:
         pt_model = Model().eval()
         x = torch.randn(1, 3, 24, 24)
         model = _convert_to_onnx(pt_model, x)
+        # simplifier required to transform torch.nn.Upsample into a single onnx Resize op
+        model.model, _ = simplify(model.model)
         dummy_input = make_dummy_input(model.model)
         with _apply_constraints(True):
             sim = QuantizationSimModel(model, dummy_input)
