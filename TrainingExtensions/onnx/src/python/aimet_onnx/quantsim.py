@@ -151,7 +151,7 @@ class QuantizationSimModel:
                  use_symmetric_encodings: bool = False, use_cuda: bool = True,
                  device: int = 0, config_file: str = None,
                  default_data_type: QuantizationDataType = QuantizationDataType.int,
-                 simplify_model: bool = True, user_onnx_libs: List[str] = None, path: str = None):
+                 user_onnx_libs: List[str] = None, path: str = None):
         """
         Constructor
 
@@ -168,7 +168,6 @@ class QuantizationSimModel:
                                  Possible options are QuantizationDataType.int and QuantizationDataType.float.
                                  Note that the mode default_data_type=QuantizationDataType.float is only supported with
                                  default_output_bw=16 and default_param_bw=16
-        :param simplify_model: Default True, uses onnx simplifier to simplify model
         :param user_onnx_libs: List of paths to all compiled ONNX custom ops libraries
         :param path: Directory to save the artifacts.
         """

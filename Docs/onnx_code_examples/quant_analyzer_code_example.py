@@ -42,6 +42,7 @@
 from typing import Any
 import numpy as np
 from onnxruntime import InferenceSession
+from onnxsim import simplify
 
 from aimet_common.defs import QuantScheme
 from aimet_common.utils import CallbackFunc
@@ -102,6 +103,7 @@ def quant_analyzer_example():
 
     # Step 3. Prepare model, callback functions and dataloader
     onnx_model = Model()
+    onnx_model = simplify(onnx_model)
 
     input_shape = (1, 3, 224, 224)
     dummy_data = np.random.randn(*input_shape).astype(np.float32)
