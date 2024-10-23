@@ -42,7 +42,6 @@ import torch
 
 from aimet_common.defs import QuantScheme, QuantizationDataType, MAP_ROUND_MODE_TO_PYMO
 from aimet_common.utils import AimetLogger, log_with_error_and_assert_if_false
-from aimet_torch.utils import get_v1_quant_scheme_for_initialization
 from aimet_torch.utils import get_v1_quant_scheme_for_initialization, is_leaf_module
 from aimet_torch.v1.qc_quantize_op import QcQuantizeOpMode, QcQuantizeWrapper, StaticGridQuantWrapper, tensor_quantizer_factory
 from aimet_torch.v1.tensor_quantizer import TensorQuantizer, StaticGridPerChannelQuantizer
