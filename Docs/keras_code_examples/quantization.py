@@ -38,6 +38,8 @@ import numpy as np
 import tensorflow as tf
 
 from aimet_tensorflow.keras import quantsim
+# Optional import only required for fine-tuning
+from aimet_tensorflow.keras.quant_sim.qc_quantize_wrapper import QcQuantizeWrapper
 
 def evaluate(model: tf.keras.Model, forward_pass_callback_args):
     """
@@ -68,6 +70,13 @@ def quantize_model():
     sim.compute_encodings(evaluate, forward_pass_callback_args=(dummy_x, dummy_y))
 
     # Do some fine-tuning
+    # Note:: For GPU workloads and models with non-trainable BatchNorms is not supported,
+    # So user need to explicitly set the BatchNorms to trainable.
+    # Below code snippet sets the BatchNorms to trainable
+    for layer in sim.model.layers:
+        if isinstance(layer, QcQuantizeWrapper) and isinstance(layer._layer_to_wrap, tf.keras.layers.BatchNormalization):
+            layer._layer_to_wrap.trainable = True
+
     sim.model.fit(x=dummy_x, y=dummy_y, epochs=10)
 
 quantize_model()
