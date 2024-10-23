@@ -49,7 +49,8 @@ from aimet_onnx.layer_output_utils import LayerOutputUtil
 # Step 1. Obtain original or quantsim model
 # Load the model.
 model = onnx.load('path/to/aimet_export_artifacts/model.onnx')
-model = simplify(model)
+# Simplify the model
+model, _ = simplify(model)
 
 # Use same arguments as that were used for the exported QuantSim model. For sake of simplicity only mandatory arguments are passed below.
 quantsim = QuantizationSimModel(model=model, dummy_input=dummy_input_dict, use_cuda=False)

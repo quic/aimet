@@ -41,5 +41,6 @@ from aimet_onnx.cross_layer_equalization import equalize_model
 
 def cross_layer_equalization():
     onnx_model = Model()
-    onnx_model = simplify(onnx_model)
+    # Simplify the model
+    onnx_model, _ = simplify(onnx_model)
     equalize_model(onnx_model)

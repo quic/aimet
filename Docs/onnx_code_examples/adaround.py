@@ -57,7 +57,9 @@ def apply_adaround_example(model, dataloader):
         Example code to run adaround
 
         """
-        model = simplify(model)
+        # Simplify the model
+        model, _ = simplify(model)
+
         params = AdaroundParameters(data_loader=dataloader, num_batches=1, default_num_iterations=5,
                                     forward_fn=pass_calibration_data,
                                     forward_pass_callback_args=None)

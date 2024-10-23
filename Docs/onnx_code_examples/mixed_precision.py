@@ -64,7 +64,7 @@ def quantize_with_mixed_precision(model):
     forward_pass_call_back = CallbackFunc(forward_pass_callback, func_callback_args=None)
 
     # Create quant sim
-    model = simplify(model)
+    model, _ = simplify(model)  # Simplify the model
     sim = QuantizationSimModel(model, default_param_bw=default_bitwidth, default_output_bw=default_bitwidth)
     sim.compute_encodings(forward_pass_callback, forward_pass_callback_args=None)
     # Call the mixed precision algo with clean start = True i.e. new accuracy list and pareto list will be generated

@@ -52,7 +52,8 @@ BATCH_SIZE = 32
 
 # Step 2. Prepare model and dataloader
 onnx_model = Model()
-onnx_model = simplify(onnx_model)
+# Simplify the model
+onnx_model, _ = simplify(onnx_model)
 
 input_shape = (1, 3, 224, 224)
 dummy_data = np.random.randn(*input_shape).astype(np.float32)
