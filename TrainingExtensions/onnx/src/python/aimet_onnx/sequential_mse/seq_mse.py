@@ -49,7 +49,6 @@ from onnx import numpy_helper
 from onnx.utils import Extractor
 
 # pylint: disable=wrong-import-order
-from aimet_onnx.utils import remove_nodes_with_type
 from aimet_onnx.quantsim import QuantizationSimModel
 from aimet_onnx.qc_quantize_op import QcQuantizeOp
 from aimet_onnx.sequential_mse.dependency_graph_utils import DependencyGraphUtils
