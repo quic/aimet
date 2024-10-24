@@ -36,7 +36,7 @@
 # =============================================================================
 """ Utilities for parsing and applying quantsim configurations from json config file """
 from abc import abstractmethod
-from typing import List, Dict, Tuple
+from typing import List, Dict, Tuple, Union
 
 import onnx
 from packaging import version
@@ -393,6 +393,9 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
             self._modify_activation_quantize_op(op_to_quantizer.input_quantizers + op_to_quantizer.output_quantizers,
                                                 ConfigDictKeys.IS_SYMMETRIC, op_config[ConfigDictKeys.IS_SYMMETRIC],
                                                 modified_quantize_ops)
+        if ConfigDictKeys.ENCODING_CONSTRAINTS in op_config:
+            self._modify_activation_quantize_op(op_to_quantizer.output_quantizers, ConfigDictKeys.ENCODING_CONSTRAINTS,
+                                                op_config[ConfigDictKeys.ENCODING_CONSTRAINTS], modified_quantize_ops)
 
         # Will only see this in the op_type section, not default
         if ConfigDictKeys.PARAMS in op_config:
@@ -411,7 +414,7 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
 
     @staticmethod
     def _modify_activation_quantize_op(quantize_ops_to_modify: List[QcQuantizeOp], setting_name: str,
-                                       quantizer_setting: bool, modified_quantize_ops: Dict):
+                                       quantizer_setting: Union[Dict, bool], modified_quantize_ops: Dict):
         """
         Modify the appropriate quantize ops for the given quantizer setting.  If a quantize op has already been
         modified, compare the old setting with the new setting and assert if the settings conflict.
@@ -430,8 +433,11 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
                 # Tensor quantizer's setting has already been modified
                 if setting_name in [ConfigDictKeys.IS_INPUT_QUANTIZED, ConfigDictKeys.IS_OUTPUT_QUANTIZED]:
                     current_setting = quantizer.enabled
-                else:
+                elif setting_name == ConfigDictKeys.IS_SYMMETRIC:
                     current_setting = quantizer.use_symmetric_encodings
+                else:
+                    current_setting = {ConfigDictKeys.MIN: quantizer._encoding_min_max_fixed_vals[0], # pylint: disable=protected-access
+                                       ConfigDictKeys.MAX: quantizer._encoding_min_max_fixed_vals[1]} # pylint: disable=protected-access
                 if current_setting != quantizer_setting:
                     logger.error('Conflicting tensor quantizer settings for symmetric encodings')
                     raise AssertionError('Conflicting tensor quantizer settings for symmetric encodings')
@@ -442,8 +448,11 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
                     else:
                         quantizer.enabled = True
                         quantizer.op_mode = OpMode.updateStats
-                else:
+                elif setting_name == ConfigDictKeys.IS_SYMMETRIC:
                     quantizer.use_symmetric_encodings = quantizer_setting
+                elif setting_name == ConfigDictKeys.ENCODING_CONSTRAINTS:
+                    quantizer.set_fixed_encoding_range((quantizer_setting[ConfigDictKeys.MIN],
+                                                        quantizer_setting[ConfigDictKeys.MAX]))
                 if quantizer not in modified_quantize_ops:
                     modified_quantize_ops[quantizer] = {setting_type}
                 else:

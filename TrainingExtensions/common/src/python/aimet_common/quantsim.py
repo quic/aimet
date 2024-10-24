@@ -96,6 +96,30 @@ def is_non_strict_symmetric(use_symmetric_encodings: bool,
            not is_unsigned_symmetric
 
 
+def create_encoding_from_min_max(min_val: float, max_val: float, bitwidth: int, use_symmetric_encodings: bool,
+                                 use_strict_symmetric: bool) -> libpymo.TfEncoding:
+    """
+    Returns a TfEncoding object with the provided min/max/bitwidth/symmetry
+
+    :param min_val: Min value of the encoding
+    :param max_val: Max value of the encoding
+    :param bitwidth: Encoding bitwidth
+    :param use_symmetric_encodings: If True, results in encoding with min = -max - delta
+    :param use_strict_symmetric: If True, results in encoding with min = -max
+    :return: libpymo.TfEncoding object
+    """
+    delta, offset = calculate_delta_offset(min_val, max_val, bitwidth, use_symmetric_encodings, use_strict_symmetric)
+
+    encoding = libpymo.TfEncoding()
+    encoding.bw = bitwidth
+    encoding.min = min_val
+    encoding.max = max_val
+    encoding.delta = delta
+    encoding.offset = offset
+    # Note: need to recompute grid to account for offset rounding
+    return recompute_grid_params(encoding, bitwidth, use_symmetric_encodings, use_strict_symmetric)
+
+
 def calculate_delta_offset(min_val: float, max_val: float, bitwidth: int, use_symmetric_encodings: bool,
                            use_strict_symmetric: bool) -> Tuple[float, int]:
     """
@@ -148,12 +172,14 @@ def compute_min_max_given_delta_offset(delta: float, offset: int, bitwidth: int,
     return min_val, max_val
 
 def recompute_grid_params(current_encoding: libpymo.TfEncoding, bitwidth: int,
-                          use_symmetric_encoding: bool) -> libpymo.TfEncoding:
+                          use_symmetric_encoding: bool, use_strict_symmetric: bool = False) -> libpymo.TfEncoding:
     """
-    Recomputed the encoding grid params - min/max/offset and delta.
+    Recomputes the encoding grid params - min/max/offset and delta.
+
     :param current_encoding: Encoding associated with the quantizer as TfEncoding
     :param bitwidth: bit width configured for the quantizer
     :param use_symmetric_encoding: symmetric or asymmetric mode
+    :param use_strict_symmetric: True if using strict symmetric, False otherwise
     :return: updated encoding params as libpymo.TfEncoding type.
     """
 
@@ -167,7 +193,7 @@ def recompute_grid_params(current_encoding: libpymo.TfEncoding, bitwidth: int,
         num_positive_steps = (2 ** (bitwidth - 1)) - 1
         abs_max_val = max(abs(max_val), abs(min_val))
         delta = abs_max_val / num_positive_steps
-        offset = -(num_positive_steps + 1)
+        offset = -(num_positive_steps + int(not use_strict_symmetric))
         # recompute min/max values
         min_val = delta * offset
         max_val = delta * num_positive_steps

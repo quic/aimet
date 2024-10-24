@@ -2454,3 +2454,37 @@ def matmul_add_model():
     )
     onnx.checker.check_model(model, True)
     return model
+
+def softmax_model():
+    model = helper.make_model(
+        graph=helper.make_graph(
+            name='SoftmaxModel',
+            inputs=[helper.make_tensor_value_info('model_input', TensorProto.FLOAT, shape=[1, 1, 8, 8])],
+            outputs=[helper.make_tensor_value_info('model_output', TensorProto.FLOAT, shape=[1, 1, 8, 8])],
+            initializer=[
+                numpy_helper.from_array(np.full((1, 1, 8, 8), 25.0).astype('float32'), name='matmul_1.weight'),
+            ],
+            nodes=[
+                helper.make_node(
+                    'MatMul',
+                    inputs=['model_input', 'matmul_1.weight'],
+                    outputs=['matmul.output'],
+                    name='matmul'
+                ),
+                helper.make_node(
+                    'Softmax',
+                    inputs=['matmul.output'],
+                    outputs=['softmax.output'],
+                    name='softmax'
+                ),
+                helper.make_node(
+                    'Sigmoid',
+                    inputs=['softmax.output'],
+                    outputs=['model_output'],
+                    name='sigmoid'
+                ),
+            ]
+        )
+    )
+    onnx.checker.check_model(model, True)
+    return model
