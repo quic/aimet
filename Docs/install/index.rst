@@ -46,13 +46,13 @@ AIMET Installation
 This page contains instructions for the following installation scenarios:
 
 - :ref:`Quick Install of the latest version for PyTorch <idx-install-quick>`
-- :ref:`Installation of the latest version for all platforms from release packages <idx-install-latest>`
+- :ref:`Installation of the latest version for all platforms <idx-install-latest>`
 - :ref:`Installation of older versions <idx-install-older>`
 
 You can also:
 
-- :doc:`Install manually <install_host>`
-- :doc:`Install a Docker image, including from a pre-built image or local build <install_docker>`
+- :doc:`Install manually on a host machine <install_host>`
+- :doc:`Install a pre-built or locally built image in a Docker container <install_docker>`
 
 .. note::
     
@@ -86,11 +86,11 @@ The following software versions are required for the quick install:
 * CUDA 12.0
 * Torch 2.2.2
 
-Ensure that you have the LAPACK linear algebra package installed:
+Ensure that you have the LAPACK linear algebra and libpython3-dev development packages installed:
 
 .. code-block:: bash
 
-    apt-get install liblapacke
+    apt-get install liblapacke libpython3-dev
 
 Installation
 ------------
@@ -117,10 +117,28 @@ Installing  the latest version with release packages
 
 Install the latest version of any AIMET variant from the **.whl** files hosted at https://github.com/quic/aimet/releases.
 
+
+Prerequisites
+-------------
+
+These prerequisites apply to all frameworks and variants.
+
+Ensure that you have the LAPACK linear algebra and libpython3-dev development packages installed:
+
+.. code-block:: bash
+
+    apt-get install liblapacke libpython3-dev
+
+Install a compatible version of pip. The latest version is *not* compatible with our wheel packages.
+
+.. code-block:: bash
+
+    python3 -m pip install pip==24.0
+
 Choose and install a package
 ----------------------------
 
-Use one of the following commands to install AIMET based on your choice of framework and GPU option.
+Use one of the following commands to install AIMET based on your choice of framework and runtime environment.
 
 .. note::
     
@@ -132,19 +150,19 @@ With CUDA 12.x:
 
 .. parsed-literal::
 
-   python3 -m pip install |download_url|\ |version|/aimet_torch-\ |version|.cu121\ |whl_suffix|
+   python3 -m pip install |download_url|\ |version|/aimet_torch-\ |version|.cu121\ |whl_suffix| -f |torch_pkg_url|
 
 With CPU only:
 
 .. parsed-literal::
 
-    python3 -m pip install |download_url|\ |version|/aimet_torch-\ |version|.cpu\ |whl_suffix|
+    python3 -m pip install |download_url|\ |version|/aimet_torch-\ |version|.cpu\ |whl_suffix| -f |torch_pkg_url|
 
-With CUDA 11.x:
+**Pytorch 1.13 with CUDA 11.x**
 
 .. parsed-literal::
 
-    python3 -m pip install |download_url|\ |version|/aimet_torch-\ |version|.cu117\ |whl_suffix|
+    python3 -m pip install |download_url|\ |version|/aimet_torch-\ |version|.cu117\ |whl_suffix| -f |torch_pkg_url|
 
 
 **Tensorflow 2.10 GPU**
@@ -153,13 +171,13 @@ With CUDA 11.x:
 
 .. parsed-literal::
 
-    python3 -m pip install |download_url|\ |version|/aimet_tensorflow-\ |version|.cu118\ |whl_suffix|
+    python3 -m pip install |download_url|\ |version|/aimet_tensorflow-\ |version|.cu118\ |whl_suffix| -f |torch_pkg_url|
 
 With CPU only:
 
 .. parsed-literal::
 
-    python3 -m pip install |download_url|\ |version|/aimet_tensorflow-\ |version|.cpu\ |whl_suffix|
+    python3 -m pip install |download_url|\ |version|/aimet_tensorflow-\ |version|.cpu\ |whl_suffix| -f |torch_pkg_url|
 
 
 **ONNX 1.16 GPU**
@@ -168,13 +186,13 @@ With CUDA 11.x:
 
 .. parsed-literal::
 
-    python3 -m pip install |download_url|\ |version|/aimet_onnx-\ |version|.cu117\ |whl_suffix|
+    python3 -m pip install |download_url|\ |version|/aimet_onnx-\ |version|.cu117\ |whl_suffix| -f |torch_pkg_url|
 
 With CPU only:
 
 .. parsed-literal::
 
-    python3 -m pip install |download_url|\ |version|/aimet_onnx-\ |version|.cpu\ |whl_suffix|
+    python3 -m pip install |download_url|\ |version|/aimet_onnx-\ |version|.cpu\ |whl_suffix| -f |torch_pkg_url|
 
 
 Next steps
@@ -194,7 +212,7 @@ View the release notes for older versions at https://github.com/quic/aimet/relea
 
 .. |whl_suffix| replace:: -cp310-cp310-manylinux_2_34_x86_64.whl
 .. |download_url| replace:: \https://github.com/quic/aimet/releases/download/
-
+.. |torch_pkg_url| replace:: \https://download.pytorch.org/whl/torch_stable.html
 
 :hideitem:`Other installation options`
 ======================================
@@ -204,5 +222,5 @@ View the release notes for older versions at https://github.com/quic/aimet/relea
    :hidden:
    :maxdepth: 2
 
-   Manual install <install_host>
-   Docker install <install_docker>
+   Install on a host machine <install_host>
+   Install in a Docker container <install_docker>

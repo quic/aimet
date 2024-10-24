@@ -36,16 +36,18 @@
 
 .. _installation-docker:
 
-##############################
-AIMET Docker install and setup
-##############################
+############################
+AIMET installation in Docker
+############################
 
 This page describes how to install AIMET in a development Docker container.
 
 Prerequisites
 =============
 
-Ensure that you have Docker installed.
+Install Docker from https://docs.docker.com/engine/install/ubuntu/
+
+For GPU variants, install the NVIDIA Container Toolkit from https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html
 
 
 Installing AIMET
@@ -55,10 +57,11 @@ To install an AIMET development Docker container, you:
 
 1. Decide on an AIMET variant to install
 2. Choose to either:
-   1. Download a prebuilt Docker image
-   2. Build a Docker image
+   
+   - Download a prebuilt Docker image
+   - Build a Docker image
 
-Follow the instructions below to begin installing an AIMET Docker container. Depending on your installation choices, you will skip various sections on this page.
+Follow the instructions below to install AIMET within a Docker container. Depending on your installation choices, you will skip various sections on this page.
 
 
 1. Choose your AIMET variant
@@ -66,14 +69,14 @@ Follow the instructions below to begin installing an AIMET Docker container. Dep
 
 **1.1 Choose a variant.**
 
-Choose a variant (a combination of framework and processor option) from the following table. Copy the **<variant_string>**.
+Choose a variant (a combination of framework and runtime environment) from the following table. Copy the **<variant_string>**.
 
 .. list-table::
    :widths: 12 12 20
    :header-rows: 1
 
    * - Framework
-     - Processor
+     - Runtime Environment
      - `<variant_string>`
    * - PyTorch 2.1
      - GPU
@@ -111,12 +114,8 @@ Set the ``AIMET_VARIANT`` shell variable to your chosen variant string.
 
 Choose one of the following options. We recommend using a prebuilt Docker image unless your installation requires custom dependencies.
 
-:ref:`1. Download a prebuilt Docker image <docker-install-download>`
-
-or
-
-:ref:`2. Build a Docker image <docker-install-build>`
-
+- :ref:`Download a prebuilt Docker image <docker-install-download>`
+- :ref:`Build a Docker image <docker-install-build>`
 
 .. _docker-install-download:
 
@@ -137,10 +136,10 @@ where:
 
 **<absolute_path_to_workspace>**
     is the absolute path to the directory where the AIMET Git repository resides on your local machine.
-**AIMET_VARIANT**
-    is the parameter you set in the previous section.
 **<container_name>**
     is whatever name you want to assign the AIMET Docker container.
+
+**${AIMET_VARIANT}** is the shell variable you set in the previous section. Type the variable as shown.
 
 When you start the Docker container, it will be downloaded from the image library located at **docker_image_name**.
 
@@ -149,7 +148,7 @@ When you start the Docker container, it will be downloaded from the image librar
 
 .. _docker-install-build:
 
-4. Build a Docker image
+1. Build a Docker image
 -----------------------
 
 **4.1 Set environment variables.**
@@ -281,6 +280,10 @@ https://github.com/quic/aimet/releases
     # for example "aimet_tensorflow-1.34.0.cu118-cp310-cp310-manylinux_2_34_x86_64.whl"
     export wheel_file_name="<wheel file name>"
 
+    # NOTE: Do the following only for the PyTorch and ONNX variant packages!
+    export find_pkg_url_str="-f https://download.pytorch.org/whl/torch_stable.html"
+
+
 6.2.3 Install the selected AIMET package.
 
 .. note::
@@ -289,7 +292,7 @@ https://github.com/quic/aimet/releases
 
 .. code-block:: bash
 
-    # Install an compatible version of pip (since the latest version is NOT compatible with our wheel packages)
+    # Install a compatible version of pip (since the latest version is NOT compatible with our wheel packages)
     python3 -m pip install pip==24.0
 
     # Install the wheel package

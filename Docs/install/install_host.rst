@@ -40,7 +40,7 @@
 AIMET manual installation and setup
 ###################################
 
-This page describes how to manually install AIMET, including all prerequisites and dependencies, for all framework and GPU variants.
+This page describes how to manually install AIMET, including all prerequisites and dependencies, for all framework and variants.
 
 .. note::
 
@@ -102,7 +102,7 @@ All versions of the CUDA toolkit are also listed at https://developer.nvidia.com
 
     In the next step, do not execute the final command, **sudo apt-get install cuda**, in the install instructions.
 
-2.2 Follow the command-line instructions on the download page to install the CUDA toolkit, but do *not* execute the final command, **sudo apt-get install cuda**.
+2.2 Follow the command-line instructions on the developer.nvidia.com download page to install the CUDA toolkit, but do *not* execute the final command, **sudo apt-get install cuda**.
 
 2.3 Execute the following to update the CUDA repository key.
 
@@ -132,12 +132,14 @@ Based on your machine learning framework and GPU preference, choose one of the i
 1. Installing AIMET for PyTorch
 -------------------------------
 
-**1.1 Select the release tag for the version you want to install, for example, "1.34.0". Releases are listed at:**
+**1.1 Select the release tag for the version you want to install.**
+
+For example, "1.34.0". Releases are listed at:
 
 https://github.com/quic/aimet/releases
 
-    - Identify the .whl file corresponding to the package variant that you want to install
-    - Continue with the instructions below to install AIMET from the .whl file
+ - Identify the .whl file corresponding to the package variant that you want to install.
+ - Continue with the instructions below to install AIMET from the .whl file.
 
 **1.2 Set the package details.**
 
@@ -152,6 +154,10 @@ https://github.com/quic/aimet/releases
     # Set the wheel file name with extension,
     # for example "aimet_torch-1.33.0.cu121-cp310-cp310-manylinux_2_34_x86_64.whl"
     export wheel_file_name="<wheel file name>"
+
+    # NOTE: Do the following ONLY for the PyTorch and ONNX variant packages!
+    export find_pkg_url_str="-f https://download.pytorch.org/whl/torch_stable.html"
+
 
 **1.3 Install the selected AIMET package.**
 
@@ -214,7 +220,7 @@ where **<cuda-version>** is the version of CUDA that you installed in the :ref:`
 
 .. _man-install-tf:
 
-2. Installing AIMET for TensorFlow
+1. Installing AIMET for TensorFlow
 ----------------------------------
 
 **2.1 Select the release tag for the version you want to install, for example, "1.34.0". Releases are listed at:**
