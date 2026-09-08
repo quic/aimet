@@ -10,8 +10,10 @@ parsers, and the rule that an unrated item scores 0 and stays in the denominator
 """
 
 import contextlib
+import json
 import os
 from collections import Counter
+from pathlib import Path
 
 import pytest
 
@@ -309,7 +311,11 @@ class TestGraceMetric:
     def test_registered_under_its_class_name(self):
         from GenAILab.bench.yaml_config_parser import YAMLConfigParser
 
-        assert YAMLConfigParser.get_metric("Grace") is self._grace()
+        # Imported first: the registration decorator fires on import, and the
+        # lookup would otherwise run before it when this file is the only one
+        # collected.
+        grace = self._grace()
+        assert YAMLConfigParser.get_metric("Grace") is grace
 
     def test_prompt_set_version_is_reported_as_the_scoring_version(self):
         # Versioning the name instead would rename the results key on every
@@ -445,15 +451,24 @@ class TestGraceEvaluate:
                 yield
 
         class FakeGrader:
+            """Stands in for the grader child process.
+
+            Mirrors its contract rather than its implementation: reads the
+            responses file the parent wrote, and writes ``build_summary``'s
+            report to the summary path before returning it.
+            """
+
             instances = []
 
-            def __init__(self, **kwargs):
+            def __init__(self, responses_json, summary_json, **kwargs):
                 self.kwargs = kwargs
+                self.responses_json = Path(responses_json)
+                self.summary_json = Path(summary_json)
+                self.summary_requested = kwargs["summary"]
+                self.graded = json.loads(self.responses_json.read_text())
                 FakeGrader.instances.append(self)
 
-            def grade(self, items, summary=True):
-                self.graded = list(items)
-                self.summary_requested = summary
+            def run(self) -> dict:
                 graded = summarize(
                     [
                         GradeResult(points=10, skipped=False, rationale=""),
@@ -462,9 +477,20 @@ class TestGraceEvaluate:
                         ),
                     ]
                 )
-                if summary:
+                if self.summary_requested:
                     graded.summary_items = ["awkward phrasing (1 item)"]
-                return graded
+                payload = build_summary(
+                    self.graded,
+                    graded,
+                    metric_name=self.kwargs["metric_name"],
+                    grader_model=self.kwargs["model_id"],
+                    input_file=str(self.responses_json),
+                )
+                self.summary_json.write_text(
+                    json.dumps(payload, indent=2, ensure_ascii=False),
+                    encoding="utf-8",
+                )
+                return payload
 
         FakeGrader.instances = []
         monkeypatch.setattr(
@@ -472,7 +498,11 @@ class TestGraceEvaluate:
             "_generate_all",
             classmethod(lambda cls, *a, **k: self.ITEMS),
         )
-        monkeypatch.setattr(metrics, "ResponseGrader", FakeGrader)
+        monkeypatch.setattr(
+            metrics,
+            "_run_grader_subprocess",
+            lambda *args, **kwargs: FakeGrader(*args, **kwargs).run(),
+        )
         return metrics, FakeModel(), FakeGrader
 
     def test_returns_score_and_details(self, stubbed):
@@ -523,13 +553,13 @@ class TestGraceEvaluate:
         assert model.evicted_to == torch.device("cpu")
 
     def test_grader_defaults_are_passed_through(self, stubbed):
-        import torch
-
         metrics, model, fake_grader = stubbed
         metrics.Grace.evaluate(model, tokenizer=None, context_length=4096)
         (grader,) = fake_grader.instances
         assert grader.kwargs["model_id"] == metrics.Grace.DEFAULT_GRADER_MODEL_ID
-        assert grader.kwargs["dtype"] is torch.bfloat16
+        # A name, not a torch.dtype: it crosses a process boundary as argv.
+        assert grader.kwargs["dtype"] == metrics.Grace.DEFAULT_GRADER_DTYPE
+        assert grader.kwargs["metric_name"] == "Grace"
         assert grader.summary_requested is True
 
     def test_summary_pass_can_be_skipped(self, stubbed):

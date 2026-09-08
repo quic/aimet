@@ -8,6 +8,9 @@ import gc
 import json
 import os
 import re
+import subprocess
+import sys
+import tempfile
 import time
 import warnings
 import yaml
@@ -42,10 +45,8 @@ from GenAILab.qai_hub_lm.scoring.grace.grace import (
 )
 from GenAILab.qai_hub_lm.scoring.grace.grader import (
     MAX_POINTS,
-    ResponseGrader,
 )
 from GenAILab.qai_hub_lm.scoring.grace.report import (
-    build_summary,
     detail_items,
 )
 from .datasets import (
@@ -1530,6 +1531,65 @@ def _deterministic_decode(enabled: bool = True):
         torch.use_deterministic_algorithms(previous)
 
 
+def _run_grader_subprocess(
+    responses_json: str | Path,
+    summary_json: str | Path,
+    *,
+    model_id: str,
+    dtype: str,
+    device_map: str | None = None,
+    allow_cpu: bool = False,
+    summary: bool = True,
+    metric_name: str = "Grace",
+) -> dict:
+    """Grade ``responses_json`` in a child process; return the summary dict.
+
+    The grader runs out-of-process because torch's caching allocator keeps the
+    35B grader's segments reserved for the life of the process even after every
+    tensor is freed. ONNX Runtime allocates from the driver rather than through
+    torch, so it cannot reuse them and fails to rebuild its session afterwards.
+    Process exit is the only reliable way to hand that memory back.
+
+    Both paths belong to the caller: ``responses_json`` must already exist, and
+    the child writes :func:`build_summary`'s report to ``summary_json``.
+    """
+    # The child needs the parent's GPU footprint as small as possible, or
+    # device_map="auto" offloads layers to the host and grading crawls.
+    gc.collect()
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+        free, total = torch.cuda.mem_get_info()
+        print(
+            f"Parent GPU state before grader: "
+            f"{(total - free) / 1024**3:.2f} GiB used / {total / 1024**3:.2f} GiB total"
+        )
+
+    cmd = [
+        sys.executable,
+        "-m",
+        "GenAILab.bench.grade_responses",
+        str(responses_json),
+        "--output-json",
+        str(summary_json),
+        "--model",
+        model_id,
+        "--dtype",
+        dtype,
+        "--metric-name",
+        metric_name,
+    ]
+    if device_map:
+        cmd += ["--device-map", device_map]
+    if allow_cpu:
+        cmd.append("--allow-cpu")
+    if not summary:
+        cmd.append("--no-summary")
+    print(f"Running grader: {' '.join(cmd)}")
+    # Inherits stdout/stderr so the grading progress bar stays visible.
+    subprocess.run(cmd, check=True)
+    return json.loads(Path(summary_json).read_text(encoding="utf-8"))
+
+
 def _format_grader_summary(summary: dict, items: list[dict]) -> str:
     """Render the grader summary dict as the human-readable report.
 
@@ -1778,47 +1838,40 @@ class Grace(TextEvaluationMetric):
         if not items:
             raise ValueError("Grace generated no responses to grade.")
 
-        out_dir = Path(output_dir) if output_dir is not None else None
-        responses_path = None
-        if out_dir is not None:
+        with contextlib.ExitStack() as stack:
+            # The responses file is how the items reach the grader process, so
+            # one is needed even when the caller does not want the artifacts.
+            out_dir = (
+                Path(output_dir)
+                if output_dir is not None
+                else Path(stack.enter_context(tempfile.TemporaryDirectory()))
+            )
             out_dir.mkdir(parents=True, exist_ok=True)
             responses_path = out_dir / "responses.json"
+            summary_path = out_dir / "grader_summary.json"
             responses_path.write_text(
                 json.dumps(items, indent=2, ensure_ascii=False), encoding="utf-8"
             )
             print(f"Wrote {len(items)} responses to {responses_path}")
 
-        # Evict the model under test to CPU: the grader is a 35B MoE, and the two
-        # do not fit on one GPU together.
-        with model.on_device(torch.device("cpu")):
-            grader = ResponseGrader(
-                model_id=grader_model_id,
-                dtype=cls.DTYPES[grader_dtype],
-                allow_cpu=allow_cpu,
-                device_map=grader_device_map,
-            )
-            try:
-                graded = grader.grade(items, summary=summary)
-            finally:
-                del grader
-                gc.collect()
-                torch.cuda.empty_cache()
-
-        grader_summary = build_summary(
-            items,
-            graded,
-            # Also the results key, so label and key cannot drift.
-            metric_name=cls.__name__,
-            grader_model=grader_model_id,
-            input_file=str(responses_path) if responses_path else "<in-memory>",
-        )
-        if out_dir is not None:
-            summary_path = out_dir / "grader_summary.json"
-            summary_path.write_text(
-                json.dumps(grader_summary, indent=2, ensure_ascii=False),
-                encoding="utf-8",
-            )
-            print(f"Wrote grading summary to {summary_path}")
+            # Evict the model under test to CPU: the grader is a 35B MoE, and
+            # the two do not fit on one GPU together. The grader itself runs in
+            # a child process, so that the sim rebuild on the way out of this
+            # block gets the GPU back -- torch never returns the grader's
+            # reserved segments to the driver within a process, and ORT cannot
+            # allocate from torch's cache.
+            with model.on_device(torch.device("cpu")):
+                grader_summary = _run_grader_subprocess(
+                    responses_path,
+                    summary_path,
+                    model_id=grader_model_id,
+                    dtype=grader_dtype,
+                    device_map=grader_device_map,
+                    allow_cpu=allow_cpu,
+                    summary=summary,
+                    # Also the results key, so label and key cannot drift.
+                    metric_name=cls.__name__,
+                )
 
         # Responses and rationales ride along in the stats file, which is the
         # copy that leaves the machine. Without them a dropped score can only

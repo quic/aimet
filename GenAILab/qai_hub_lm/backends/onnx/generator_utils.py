@@ -4,6 +4,7 @@
 """Utilities for instantiating a Generator object in onnx/test_genai.py"""
 
 import contextlib
+import gc
 
 import torch
 
@@ -90,15 +91,35 @@ class ONNXDevicePlacementMixin:
             yield
             return
 
+        # The generator's own torch tensors belong to no sim, so swapping
+        # providers alone leaves them pinned on the GPU for the whole context.
+        # For Gemma4 that is the two embedding tables — ~14 GB in fp32, enough
+        # to push a 35B grader into host offload and slow grading ~10x.
+        #
+        # Read the device off a parameter rather than self.device, which reports
+        # cuda whenever CUDA is available regardless of where the tensors are.
+        # Defaults to the target so a generator with no parameters of its own
+        # restores to a no-op rather than to None.
+        params = list(self.parameters())
+        torch_device = params[0].device if params else device
+
         try:
             for sim in sims:
                 sim.providers = target_providers
                 sim._rebuild_session()
+            self.to(device)
+            gc.collect()
+            torch.cuda.empty_cache()
             yield
         finally:
-            for sim, orig in zip(sims, original_providers):
-                sim.providers = orig
-                sim._rebuild_session()
+            # Nested so the torch tensors go back even if a session rebuild
+            # raises; otherwise a failure here leaves the generator on CPU.
+            try:
+                for sim, orig in zip(sims, original_providers):
+                    sim.providers = orig
+                    sim._rebuild_session()
+            finally:
+                self.to(torch_device)
 
 
 def _current_device_type(providers) -> str:
