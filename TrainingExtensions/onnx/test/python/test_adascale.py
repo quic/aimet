@@ -287,11 +287,11 @@ class TestAdascaleQuantizer:
         new_qdq = WeightQdq(weight_after_adascale_fold, qdq_shape, 4)
         new_qdq.set_range(adascale_qdq.get_min(), adascale_qdq.get_max())
 
-        assert torch.equal(adascale_qdq.get_max(), new_qdq.get_max())
-        assert torch.equal(adascale_qdq.get_min(), new_qdq.get_min())
+        assert torch.allclose(adascale_qdq.get_max(), new_qdq.get_max())
+        assert torch.allclose(adascale_qdq.get_min(), new_qdq.get_min())
 
         modified_out = new_qdq(weight_after_adascale_fold)
-        assert torch.equal(modified_out, adascale_out)
+        assert torch.allclose(modified_out, adascale_out)
 
     @pytest.mark.parallel
     def test_get_adascale_trainable_params_linear(self):

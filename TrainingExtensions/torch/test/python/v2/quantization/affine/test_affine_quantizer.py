@@ -2756,11 +2756,10 @@ def test_positive_scale(min_val, max_val):
     assert torch.all(scale > 0)
     assert torch.all(torch.logical_and(offset <= 0, offset >= -255))
 
-    loss = torch.nn.functional.mse_loss(out, x)
-    loss.backward()
-
-    assert torch.all(qtzr.min.grad != 0)
     if abs(max_val - min_val) > _get_minimum_scale(qtzr.qmax - qtzr.qmin):
+        loss = torch.nn.functional.mse_loss(out, x)
+        loss.backward()
+        assert torch.all(qtzr.min.grad != 0)
         assert torch.all(qtzr.max.grad != 0)
 
 

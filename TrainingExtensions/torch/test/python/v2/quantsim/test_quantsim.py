@@ -2855,7 +2855,9 @@ def test_model_without_nll_loss_2d():
     dummy_input = (torch.randn(1, 3, 8, 8), torch.zeros(1, 8, 8, dtype=torch.long))
     with warnings.catch_warnings():
         # Promote NLLLoss2d FutureWarnings to errors so the test fails if suppression regresses
-        warnings.filterwarnings("error", category=FutureWarning)
+        warnings.filterwarnings(
+            "error", category=FutureWarning, message="`NLLLoss2d` has been deprecated"
+        )
         sim = aimet_torch.QuantizationSimModel(
             model, dummy_input, quant_scheme=QuantScheme.min_max
         )

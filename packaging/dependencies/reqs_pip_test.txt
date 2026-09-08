@@ -9,8 +9,6 @@ pytest
 pytest-extra-durations
 pytest-xdist
 pytorch-ignite
-# Temporarily pin torch to unblock CI
-torch<2.14.0
 torchvision
 
 # Excluded on Windows ARM64 (no wheels available)

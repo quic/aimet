@@ -42,7 +42,11 @@ def autograd_based_qdq(
         offset = offset.view(interleave(offset.shape, 1))
 
     x_round = STE.apply(tensor / scale) - offset
-    x_quant = torch.clamp(x_round, qmin, qmax)
+    # PyTorch 2.14 clamp has different graidient in the clipping boundaries.
+    # To keep the boundary gradient alive as in PyTorch 2.13,
+    # we add a small margin to the clamp range and round it back to integer grid
+    # See https://github.com/pytorch/pytorch/issues/195931
+    x_quant = STE.apply(torch.clamp(x_round, qmin - 0.1, qmax + 0.1))
     return ((x_quant + offset) * scale).view(orig_tensor_shape)
 
 
