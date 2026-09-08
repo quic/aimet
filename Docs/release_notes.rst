@@ -6,6 +6,52 @@
 Release notes
 #############
 
+2.39.0
+======
+
+* New Features
+    * ONNX
+        * Support tuple of ``(param_type, act_type)`` in the LiteMP API (`64ecf7e`_)
+    * Torch
+        * Implement NVFP4 JSON encoding export (`b0c8d15`_)
+        * Implement NVFP4 ONNX QDQ export (`ddcc3d1`_, `86fe90e`_)
+        * Implement LPBQ export in v2.1.0 encoding format (`607c5dc`_)
+
+* Bug fixes and Improvements
+    * ONNX
+        * Fix loading encodings to fp16 sims (`bb616e9`_)
+        * Fix matmul exception rule triggering with float16 input (`20440b5`_)
+        * Avoid protobuf 2GB serialize+reparse cap when duplicating shared ONNX initializers (`7e31da0`_)
+        * Place online SpinQuant R1 rotation at the final residual for models with no lm_head (`03e40db`_)
+
+    * Torch
+        * Fix quantsim init failure for models with an int-to-float Cast op (`217d66d`_)
+        * Derive ONNX channel/block axis safely from input shape during export (`796046c`_)
+        * Reduce memory footprint of the ``_decompose_prequantized_tensor`` early-exit check and full grid search (`e04d5ca`_, `b2ef967`_)
+        * Remove ``input_dtype`` from LPBQ JSON encoding v2.1.0 (`99d637b`_)
+
+    * Common
+        * Derive FP8 scales from the raw observed range instead of the quantization-grid-snapped range (`058e4d5`_)
+
+.. _64ecf7e: https://github.com/qualcomm/aimet/commit/64ecf7e409a06ac9e1c5da4439515bf4bd1a1070
+.. _b0c8d15: https://github.com/qualcomm/aimet/commit/b0c8d15173149b6c7c9ac8a8cc4cfd84433b4fa7
+.. _ddcc3d1: https://github.com/qualcomm/aimet/commit/ddcc3d1094da2afb5dcc1ab7050553d6d8c28738
+.. _86fe90e: https://github.com/qualcomm/aimet/commit/86fe90e27a417e6ee192ab176f06afd471991fcb
+.. _607c5dc: https://github.com/qualcomm/aimet/commit/607c5dc092053148bbbeae1cf548ee55580544a1
+.. _bb616e9: https://github.com/qualcomm/aimet/commit/bb616e90c853dcd37808af20b602627a34a2e728
+.. _20440b5: https://github.com/qualcomm/aimet/commit/20440b561c8b497fc19e3ebd7bcb72fa4cfb5a67
+.. _7e31da0: https://github.com/qualcomm/aimet/commit/7e31da085fa753cef4ca5c7369f0d5d3983916bf
+.. _03e40db: https://github.com/qualcomm/aimet/commit/03e40db1d15bbeb274c93045aedf5e9bd6b91992
+.. _217d66d: https://github.com/qualcomm/aimet/commit/217d66d6b6382fb8d67cb9f6a59c2532ab6712f4
+.. _796046c: https://github.com/qualcomm/aimet/commit/796046cb5f04ed9656af8afafb403fef127dd33b
+.. _e04d5ca: https://github.com/qualcomm/aimet/commit/e04d5ca2345a290e73a3b96b8f981f3cd1878b1a
+.. _b2ef967: https://github.com/qualcomm/aimet/commit/b2ef967d166aaf46c9776a192fc5398aa48850c6
+.. _99d637b: https://github.com/qualcomm/aimet/commit/99d637b5972f9ec88ba5daf1fd9541ff42ff3a77
+.. _058e4d5: https://github.com/qualcomm/aimet/commit/058e4d54d1f987afa1c2a8ee65776c3f8d480b38
+
+
+
+
 2.38.0
 ======
 
