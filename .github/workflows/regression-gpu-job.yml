@@ -195,6 +195,39 @@ jobs:
           fi
 
           uv pip install mmpose --no-deps --extra-index-url https://download.pytorch.org/whl/${{ env.VER_CUDA_SHORT }} --index-strategy unsafe-best-match  # Required by hrnet_pose (not in qai-hub-models extras)
+
+          # Pre-install each regression model's per-model extras so the suite run
+          # doesn't pay the install cost (or fail on a network blip) mid-test.
+          # Keep the pinned indexes exported so qai-hub-models' own pip calls
+          # cannot re-resolve torch onto an incompatible CUDA wheel.
+          export PIP_EXTRA_INDEX_URL="https://download.pytorch.org/whl/${{ env.VER_CUDA_SHORT }}"
+          export UV_EXTRA_INDEX_URL="$PIP_EXTRA_INDEX_URL"
+          export UV_INDEX_STRATEGY="unsafe-best-match"
+
+          install_failures=""
+          for config in AIMETRegression/configs/models/*.yaml; do
+            model_name="$(sed -n 's/^model_name:[[:space:]]*//p' "$config" | head -1)"
+            if [ -z "$model_name" ]; then
+              echo "::warning::No model_name in $config, skipping"
+              continue
+            fi
+            echo "::group::qai-hub-models install $model_name"
+            if ! qai-hub-models install "$model_name" --yes; then
+              echo "::warning::qai-hub-models install $model_name failed"
+              install_failures="$install_failures $model_name"
+            fi
+            # qai-hub-models' PyPI wheel excludes the `scripts` subpackage (dev-only),
+            # so call the underlying util directly instead of `-m qai_hub_models.scripts.setup_external_repos`.
+            if ! python -c "from qai_hub_models.utils.external_repo import setup_external_repos; from qai_hub_models.utils.path_helpers import QAIHM_MODELS_ROOT; setup_external_repos(QAIHM_MODELS_ROOT / '$model_name')"; then
+              echo "::warning::setup_external_repos $model_name failed"
+              install_failures="$install_failures $model_name"
+            fi
+            echo "::endgroup::"
+          done
+          if [ -n "$install_failures" ]; then
+            echo "::warning::Model installs failed for:$install_failures"
+          fi
+
           python -c "import aimet_${{ inputs.framework }} as aimet; print('AIMET version:', aimet.__version__)"
 
       - name: Verify ONNX Runtime GPU
