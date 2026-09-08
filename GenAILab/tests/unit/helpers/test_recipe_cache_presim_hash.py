@@ -77,7 +77,10 @@ def test_no_presim_hash_equals_legacy_no_spinquant(cache):
 def test_presim_changes_hash(cache):
     h_plain = cache.compute_base_hash(**COMMON, pre_sim=None)
     h_rot = cache.compute_base_hash(
-        **COMMON, pre_sim=_pre([{"name": "SpinQuant"}, {"name": "Calibration"}])
+        **COMMON,
+        pre_sim=_pre(
+            [{"name": "SpinQuant", "enable_r1": True}, {"name": "Calibration"}]
+        ),
     )
     assert h_rot != h_plain
 
@@ -105,12 +108,19 @@ def test_hash_independent_of_postsim_chain(cache):
     # base hash folds ONLY pre-sim; the post-sim steps extend the chain hash
     # separately, so they must not affect the BASE hash.
     h_a = cache.compute_base_hash(
-        **COMMON, pre_sim=_pre([{"name": "SpinQuant"}, {"name": "Calibration"}])
+        **COMMON,
+        pre_sim=_pre(
+            [{"name": "SpinQuant", "enable_r1": True}, {"name": "Calibration"}]
+        ),
     )
     h_b = cache.compute_base_hash(
         **COMMON,
         pre_sim=_pre(
-            [{"name": "SpinQuant"}, {"name": "SeqMSE"}, {"name": "Calibration"}]
+            [
+                {"name": "SpinQuant", "enable_r1": True},
+                {"name": "SeqMSE"},
+                {"name": "Calibration"},
+            ]
         ),
     )
     assert h_a == h_b

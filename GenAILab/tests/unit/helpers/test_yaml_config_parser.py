@@ -448,22 +448,24 @@ class TestValidateConfig:
                 }
             )
 
-    def test_spinquant_default_flags_pass(self):
-        # Default (enable_r1 unset → True, enable_r2 unset → False) is valid.
-        YAMLConfigParser.validate_config(
-            {
-                "model": {
-                    "model_id": "x",
-                    "sequence_length": 32,
-                    "context_length": 64,
-                },
-                "recipe": [
-                    {"name": "SpinQuant"},
-                    {"name": "Calibration"},
-                ],
-                "metrics": [{"name": "PPL"}],
-            }
-        )
+    def test_spinquant_bare_raises(self):
+        # A bare `{"name": "SpinQuant"}` no longer implies R1: it must be a
+        # validation error rather than an implicit rotation.
+        with pytest.raises(RuntimeError, match="SpinQuant"):
+            YAMLConfigParser.validate_config(
+                {
+                    "model": {
+                        "model_id": "x",
+                        "sequence_length": 32,
+                        "context_length": 64,
+                    },
+                    "recipe": [
+                        {"name": "SpinQuant"},
+                        {"name": "Calibration"},
+                    ],
+                    "metrics": [{"name": "PPL"}],
+                }
+            )
 
     def test_spinquant_backbone_only_on_vlm_raises(self):
         # SpinQuant on backbone but missing from visual is rejected: the schema
@@ -477,7 +479,10 @@ class TestValidateConfig:
                         "context_length": 64,
                     },
                     "recipe": {
-                        "backbone": [{"name": "SpinQuant"}, {"name": "Calibration"}],
+                        "backbone": [
+                            {"name": "SpinQuant", "enable_r1": True},
+                            {"name": "Calibration"},
+                        ],
                         "visual": [{"name": "Calibration"}],
                     },
                     "metrics": [{"name": "PPL"}],
@@ -496,8 +501,14 @@ class TestValidateConfig:
                         "context_length": 64,
                     },
                     "recipe": {
-                        "backbone": [{"name": "SpinQuant"}, {"name": "Calibration"}],
-                        "visual": [{"name": "Calibration"}, {"name": "SpinQuant"}],
+                        "backbone": [
+                            {"name": "SpinQuant", "enable_r1": True},
+                            {"name": "Calibration"},
+                        ],
+                        "visual": [
+                            {"name": "Calibration"},
+                            {"name": "SpinQuant", "enable_r1": True},
+                        ],
                     },
                     "metrics": [{"name": "PPL"}],
                 }

@@ -161,7 +161,15 @@ class TestSpinQuantAsPhasedStep:
 
     def test_spinquant_is_a_step_in_the_chain(self):
         r = Recipe.model_validate(
-            [{"name": "SpinQuant", "enable_r1": True}, {"name": "Calibration"}]
+            [
+                {
+                    "name": "SpinQuant",
+                    "enable_r1": True,
+                    "enable_r2": False,
+                    "enable_r3": False,
+                },
+                {"name": "Calibration"},
+            ]
         )
         assert _names(r.backbone) == ["SpinQuant", "Calibration"]
 
@@ -179,16 +187,26 @@ class TestSpinQuantAsPhasedStep:
                 ]
             )
 
-    def test_spinquant_defaults_enable_r1(self):
-        r = Recipe.model_validate([{"name": "SpinQuant"}, {"name": "Calibration"}])
-        assert r.backbone[0].enable_r1 is True
+    def test_bare_spinquant_is_rejected(self):
+        # The rotation set is the identity of the checkpoint, so it is stated
+        # rather than assumed to be R1: a bare step names no rotations at all.
+        with pytest.raises(ValidationError):
+            Recipe.model_validate([{"name": "SpinQuant"}, {"name": "Calibration"}])
 
     def test_strict_prefix_visual_must_match_backbone(self):
         # Strict: visual can't omit a pre-sim step backbone declares.
         with pytest.raises(ValidationError):
             Recipe.model_validate(
                 {
-                    "backbone": [{"name": "SpinQuant"}, {"name": "Calibration"}],
+                    "backbone": [
+                        {
+                            "name": "SpinQuant",
+                            "enable_r1": True,
+                            "enable_r2": False,
+                            "enable_r3": False,
+                        },
+                        {"name": "Calibration"},
+                    ],
                     "visual": [{"name": "Calibration"}],
                 }
             )
@@ -200,11 +218,21 @@ class TestSpinQuantAsPhasedStep:
             Recipe.model_validate(
                 {
                     "backbone": [
-                        {"name": "SpinQuant", "enable_r2": True},
+                        {
+                            "name": "SpinQuant",
+                            "enable_r1": True,
+                            "enable_r2": True,
+                            "enable_r3": False,
+                        },
                         {"name": "Calibration"},
                     ],
                     "visual": [
-                        {"name": "SpinQuant", "enable_r2": False},
+                        {
+                            "name": "SpinQuant",
+                            "enable_r1": True,
+                            "enable_r2": False,
+                            "enable_r3": False,
+                        },
                         {"name": "Calibration"},
                     ],
                 }
@@ -213,8 +241,24 @@ class TestSpinQuantAsPhasedStep:
     def test_spinquant_on_both_components_ok(self):
         r = Recipe.model_validate(
             {
-                "backbone": [{"name": "SpinQuant"}, {"name": "Calibration"}],
-                "visual": [{"name": "SpinQuant"}, {"name": "Calibration"}],
+                "backbone": [
+                    {
+                        "name": "SpinQuant",
+                        "enable_r1": True,
+                        "enable_r2": False,
+                        "enable_r3": False,
+                    },
+                    {"name": "Calibration"},
+                ],
+                "visual": [
+                    {
+                        "name": "SpinQuant",
+                        "enable_r1": True,
+                        "enable_r2": False,
+                        "enable_r3": False,
+                    },
+                    {"name": "Calibration"},
+                ],
             }
         )
         assert r.backbone[0].name == "SpinQuant"
@@ -225,7 +269,17 @@ class TestPhaseAxis:
     def test_phase_property_on_steps(self):
         from GenAILab.qai_hub_lm.schema import Phase
 
-        r = Recipe.model_validate([{"name": "SpinQuant"}, {"name": "Calibration"}])
+        r = Recipe.model_validate(
+            [
+                {
+                    "name": "SpinQuant",
+                    "enable_r1": True,
+                    "enable_r2": False,
+                    "enable_r3": False,
+                },
+                {"name": "Calibration"},
+            ]
+        )
         assert r.backbone[0].phase == Phase.pre_sim
         assert r.backbone[1].phase == Phase.on_sim
 
@@ -233,12 +287,31 @@ class TestPhaseAxis:
         # SpinQuant (pre_sim) after Calibration (on_sim) is illegal: the sim is
         # already built by then.
         with pytest.raises(ValidationError) as ei:
-            Recipe.model_validate([{"name": "Calibration"}, {"name": "SpinQuant"}])
+            Recipe.model_validate(
+                [
+                    {"name": "Calibration"},
+                    {
+                        "name": "SpinQuant",
+                        "enable_r1": True,
+                        "enable_r2": False,
+                        "enable_r3": False,
+                    },
+                ]
+            )
         assert "pre-sim" in str(ei.value)
 
     def test_phased_steps_splits_by_phase(self):
         r = Recipe.model_validate(
-            [{"name": "SpinQuant"}, {"name": "SeqMSE"}, {"name": "Calibration"}]
+            [
+                {
+                    "name": "SpinQuant",
+                    "enable_r1": True,
+                    "enable_r2": False,
+                    "enable_r3": False,
+                },
+                {"name": "SeqMSE"},
+                {"name": "Calibration"},
+            ]
         )
         pre, on_sim = r.phased_steps("backbone")
         assert _names(pre) == ["SpinQuant"]
@@ -260,19 +333,36 @@ class TestSplitRecipe:
         r = Recipe.model_validate(
             {
                 "backbone": [
-                    {"name": "SpinQuant", "enable_r1": True},
+                    {
+                        "name": "SpinQuant",
+                        "enable_r1": True,
+                        "enable_r2": False,
+                        "enable_r3": False,
+                    },
                     {"name": "AdaScale"},
                     {"name": "Calibration"},
                 ],
                 "visual": [
-                    {"name": "SpinQuant", "enable_r1": True},
+                    {
+                        "name": "SpinQuant",
+                        "enable_r1": True,
+                        "enable_r2": False,
+                        "enable_r3": False,
+                    },
                     {"name": "Calibration"},
                 ],
             }
         )
         pre_sim, on_sim = split_recipe(r)
         # pre_sim is a flat list (collapsed from the identical prefixes), once
-        assert pre_sim == [{"name": "SpinQuant", "enable_r1": True}]
+        assert pre_sim == [
+            {
+                "name": "SpinQuant",
+                "enable_r1": True,
+                "enable_r2": False,
+                "enable_r3": False,
+            }
+        ]
         assert [s["name"] for s in on_sim["backbone"]] == ["AdaScale", "Calibration"]
         assert [s["name"] for s in on_sim["visual"]] == ["Calibration"]
 
@@ -316,7 +406,15 @@ class TestToComponents:
 
     def test_spinquant_stays_inline_as_step(self):
         r = Recipe.model_validate(
-            [{"name": "SpinQuant", "enable_r1": True}, {"name": "Calibration"}]
+            [
+                {
+                    "name": "SpinQuant",
+                    "enable_r1": True,
+                    "enable_r2": False,
+                    "enable_r3": False,
+                },
+                {"name": "Calibration"},
+            ]
         )
         names = [s["name"] for s in r.to_components()["backbone"]]
         assert names == ["SpinQuant", "Calibration"]
@@ -326,8 +424,24 @@ class TestToComponents:
             {"name": "Calibration"},
             [{"name": "SeqMSE"}, {"name": "Calibration"}],
             {
-                "backbone": [{"name": "SpinQuant"}, {"name": "Calibration"}],
-                "visual": [{"name": "SpinQuant"}, {"name": "Calibration"}],
+                "backbone": [
+                    {
+                        "name": "SpinQuant",
+                        "enable_r1": True,
+                        "enable_r2": False,
+                        "enable_r3": False,
+                    },
+                    {"name": "Calibration"},
+                ],
+                "visual": [
+                    {
+                        "name": "SpinQuant",
+                        "enable_r1": True,
+                        "enable_r2": False,
+                        "enable_r3": False,
+                    },
+                    {"name": "Calibration"},
+                ],
             },
         ):
             r = Recipe.model_validate(raw)

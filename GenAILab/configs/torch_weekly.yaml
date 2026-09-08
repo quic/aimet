@@ -31,6 +31,7 @@ model:
   context_length: 4096
 recipe:
   - name: SpinQuant
+    enable_r1: true
   - name: AdaScale
     num_batches: 128
     num_iterations: 2048
@@ -81,6 +82,7 @@ precision:
   kv_cache: int16
 recipe:
   - name: SpinQuant
+    enable_r1: true
   - name: AdaScale
     num_batches: 128
     num_iterations: 2048

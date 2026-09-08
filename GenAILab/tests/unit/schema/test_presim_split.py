@@ -29,7 +29,12 @@ class TestSplit:
         pre, on_sim = split_recipe(
             _r(
                 [
-                    {"name": "SpinQuant", "enable_r1": True},
+                    {
+                        "name": "SpinQuant",
+                        "enable_r1": True,
+                        "enable_r2": False,
+                        "enable_r3": False,
+                    },
                     {"name": "AdaScale", "num_iterations": 64},
                     {"name": "Calibration"},
                 ]
@@ -49,8 +54,24 @@ class TestSplit:
         pre, on_sim = split_recipe(
             _r(
                 {
-                    "backbone": [{"name": "SpinQuant"}, {"name": "Calibration"}],
-                    "visual": [{"name": "SpinQuant"}, {"name": "Calibration"}],
+                    "backbone": [
+                        {
+                            "name": "SpinQuant",
+                            "enable_r1": True,
+                            "enable_r2": False,
+                            "enable_r3": False,
+                        },
+                        {"name": "Calibration"},
+                    ],
+                    "visual": [
+                        {
+                            "name": "SpinQuant",
+                            "enable_r1": True,
+                            "enable_r2": False,
+                            "enable_r3": False,
+                        },
+                        {"name": "Calibration"},
+                    ],
                 }
             )
         )
@@ -61,7 +82,19 @@ class TestSplit:
 
 class TestHasPreSim:
     def test_true_with_spinquant(self):
-        pre, _ = split_recipe(_r([{"name": "SpinQuant"}, {"name": "Calibration"}]))
+        pre, _ = split_recipe(
+            _r(
+                [
+                    {
+                        "name": "SpinQuant",
+                        "enable_r1": True,
+                        "enable_r2": False,
+                        "enable_r3": False,
+                    },
+                    {"name": "Calibration"},
+                ]
+            )
+        )
         assert has_pre_sim(pre) is True
 
     def test_false_without(self):
@@ -74,12 +107,23 @@ class TestPreSimFlags:
         pre, _ = split_recipe(
             _r(
                 [
-                    {"name": "SpinQuant", "enable_r1": True, "enable_r2": True},
+                    {
+                        "name": "SpinQuant",
+                        "enable_r1": True,
+                        "enable_r2": True,
+                        "enable_r3": False,
+                    },
                     {"name": "Calibration"},
                 ]
             )
         )
-        assert pre_sim_flags(pre, "SpinQuant") == {"enable_r1": True, "enable_r2": True}
+        # All three flags are always present: they are contract-filled at
+        # validation, so an omitted flag lowers explicitly rather than silently.
+        assert pre_sim_flags(pre, "SpinQuant") == {
+            "enable_r1": True,
+            "enable_r2": True,
+            "enable_r3": False,
+        }
 
     def test_returns_none_when_absent(self):
         pre, _ = split_recipe(_r([{"name": "Calibration"}]))
@@ -92,11 +136,21 @@ class TestPreSimFlags:
             _r(
                 {
                     "backbone": [
-                        {"name": "SpinQuant", "enable_r1": True, "enable_r2": True},
+                        {
+                            "name": "SpinQuant",
+                            "enable_r1": True,
+                            "enable_r2": True,
+                            "enable_r3": False,
+                        },
                         {"name": "Calibration"},
                     ],
                     "visual": [
-                        {"name": "SpinQuant", "enable_r1": True},
+                        {
+                            "name": "SpinQuant",
+                            "enable_r1": True,
+                            "enable_r2": False,
+                            "enable_r3": False,
+                        },
                         {"name": "Calibration"},
                     ],
                 }
@@ -115,19 +169,46 @@ class TestCacheIdentity:
 
     def test_identity_present_when_spinquant(self):
         pre, _ = split_recipe(
-            _r([{"name": "SpinQuant", "enable_r1": True}, {"name": "Calibration"}])
+            _r(
+                [
+                    {
+                        "name": "SpinQuant",
+                        "enable_r1": True,
+                        "enable_r2": False,
+                        "enable_r3": False,
+                    },
+                    {"name": "Calibration"},
+                ]
+            )
         )
-        assert pre_sim_identity(pre) == {"SpinQuant": {"enable_r1": True}}
+        assert pre_sim_identity(pre) == {
+            "SpinQuant": {"enable_r1": True, "enable_r2": False, "enable_r3": False}
+        }
 
     def test_different_rotation_flags_give_different_identity(self):
         # rotated-R1-only vs rotated-R1+R2 must NOT collide on the cache key.
         pre_a, _ = split_recipe(
-            _r([{"name": "SpinQuant", "enable_r1": True}, {"name": "Calibration"}])
+            _r(
+                [
+                    {
+                        "name": "SpinQuant",
+                        "enable_r1": True,
+                        "enable_r2": False,
+                        "enable_r3": False,
+                    },
+                    {"name": "Calibration"},
+                ]
+            )
         )
         pre_b, _ = split_recipe(
             _r(
                 [
-                    {"name": "SpinQuant", "enable_r1": True, "enable_r2": True},
+                    {
+                        "name": "SpinQuant",
+                        "enable_r1": True,
+                        "enable_r2": True,
+                        "enable_r3": False,
+                    },
                     {"name": "Calibration"},
                 ]
             )
@@ -137,19 +218,59 @@ class TestCacheIdentity:
     def test_identity_independent_of_postsim_steps(self):
         # The base hash folds ONLY pre-sim; post-sim steps extend the chain hash
         # separately. So identity must be the same regardless of the post chain.
-        pre_a, _ = split_recipe(_r([{"name": "SpinQuant"}, {"name": "Calibration"}]))
+        pre_a, _ = split_recipe(
+            _r(
+                [
+                    {
+                        "name": "SpinQuant",
+                        "enable_r1": True,
+                        "enable_r2": False,
+                        "enable_r3": False,
+                    },
+                    {"name": "Calibration"},
+                ]
+            )
+        )
         pre_b, _ = split_recipe(
-            _r([{"name": "SpinQuant"}, {"name": "SeqMSE"}, {"name": "Calibration"}])
+            _r(
+                [
+                    {
+                        "name": "SpinQuant",
+                        "enable_r1": True,
+                        "enable_r2": False,
+                        "enable_r3": False,
+                    },
+                    {"name": "SeqMSE"},
+                    {"name": "Calibration"},
+                ]
+            )
         )
         assert pre_sim_identity(pre_a) == pre_sim_identity(pre_b)
 
     def test_identity_independent_of_dataset(self):
         # dataset is irrelevant to a pre-sim rotation identity.
-        pre_a, _ = split_recipe(_r([{"name": "SpinQuant"}, {"name": "Calibration"}]))
+        pre_a, _ = split_recipe(
+            _r(
+                [
+                    {
+                        "name": "SpinQuant",
+                        "enable_r1": True,
+                        "enable_r2": False,
+                        "enable_r3": False,
+                    },
+                    {"name": "Calibration"},
+                ]
+            )
+        )
         pre_b, _ = split_recipe(
             _r(
                 [
-                    {"name": "SpinQuant"},
+                    {
+                        "name": "SpinQuant",
+                        "enable_r1": True,
+                        "enable_r2": False,
+                        "enable_r3": False,
+                    },
                     {
                         "name": "Calibration",
                         "dataset": {"name": "C4", "split": "train"},

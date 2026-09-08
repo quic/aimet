@@ -14,8 +14,9 @@ unchanged (confirmed by the cluster parity test).
 from __future__ import annotations
 
 from enum import Enum
+from typing import Any
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, model_serializer, model_validator
 
 
 class Granularity(str, Enum):
@@ -48,19 +49,43 @@ def _is_float_qtype(q: QTypeRef) -> bool:
     return q in _FLOAT_QTYPES
 
 
+# The W4A16 contract, as filled in by the validators below: one factory per schema,
+# nested exactly like the section it fills. Factories (not module constants) so each
+# merge gets a fresh dict and no nested default is ever shared between sections --
+# lm_head and visual.weight are separate policies that happen to agree today.
+def _weight_contract() -> dict[str, Any]:
+    return {"qtype": QType.int4, "granularity": Granularity.PCQ}
+
+
+def _visual_contract() -> dict[str, Any]:
+    return {"activations": QType.int16, "weight": {"qtype": QType.int8}}
+
+
+def _precision_contract() -> dict[str, Any]:
+    return {
+        "activations": QType.int16,
+        "kv_cache": QType.int8,
+        "embedding": QType.int16,
+        "lm_head": {"qtype": QType.int8},
+        "blocks": {"default": _weight_contract()},
+    }
+
+
 class WeightPrecisionSchema(BaseModel, extra="forbid"):
     """Precision for a weight group (blocks / lm_head / visual). A bare int/str is the qtype."""
 
-    qtype: QTypeRef = QType.int4
-    granularity: Granularity = Granularity.PCQ
+    qtype: QTypeRef
+    granularity: Granularity
     block_size: int | None = None
 
     @model_validator(mode="before")
     @classmethod
-    def _accept_shorthand(cls, data):
+    def _fill_contract(cls, data):
         # ``qtype: int4`` shorthand: a bare int or str is the qtype.
         if isinstance(data, (int, str)):
-            return {"qtype": data}
+            data = {"qtype": data}
+        if isinstance(data, dict):
+            return {**_weight_contract(), **data}
         return data
 
     @model_validator(mode="after")
@@ -81,19 +106,18 @@ class WeightPrecisionSchema(BaseModel, extra="forbid"):
         return _is_float_qtype(self.qtype)
 
 
-def _default_lm_head() -> WeightPrecisionSchema:
-    return WeightPrecisionSchema(qtype=QType.int8)
-
-
-def _default_blocks() -> dict[str, WeightPrecisionSchema]:
-    return {"default": WeightPrecisionSchema(qtype=QType.int4)}
-
-
 class VisualPrecisionSchema(BaseModel, extra="forbid"):
     """Visual-encoder precision (VLMs only): weight + activations."""
 
-    weight: WeightPrecisionSchema = Field(default_factory=_default_lm_head)
-    activations: QTypeRef = QType.int16
+    weight: WeightPrecisionSchema
+    activations: QTypeRef
+
+    @model_validator(mode="before")
+    @classmethod
+    def _fill_contract(cls, data):
+        if isinstance(data, dict):
+            return {**_visual_contract(), **data}
+        return data
 
     @model_validator(mode="after")
     def _weight_not_float(self) -> "VisualPrecisionSchema":
@@ -108,11 +132,11 @@ class VisualPrecisionSchema(BaseModel, extra="forbid"):
 class PrecisionSchema(BaseModel, extra="forbid"):
     """The validated ``precision:`` section (defaults = the W4A16 contract, see module doc)."""
 
-    activations: QTypeRef = QType.int16
-    kv_cache: QTypeRef = QType.int8
-    embedding: QTypeRef = QType.int16
-    lm_head: WeightPrecisionSchema = Field(default_factory=_default_lm_head)
-    blocks: dict[str, WeightPrecisionSchema] = Field(default_factory=_default_blocks)
+    activations: QTypeRef
+    kv_cache: QTypeRef
+    embedding: QTypeRef
+    lm_head: WeightPrecisionSchema
+    blocks: dict[str, WeightPrecisionSchema]
     visual: VisualPrecisionSchema | None = None
 
     @model_validator(mode="before")
@@ -120,27 +144,39 @@ class PrecisionSchema(BaseModel, extra="forbid"):
     def _normalize_blocks(cls, data):
         # blocks may be an int/str shorthand, a flat dict, or {"default": {...}}.
         # Only "default" is supported (per-block-range precision not yet allowed).
-        if not isinstance(data, dict) or "blocks" not in data:
+        if not isinstance(data, dict):
             return data
-        blocks_raw = data["blocks"]
-        _wp_keys = {"qtype", "granularity", "block_size"}
-        if isinstance(blocks_raw, (int, str)):
-            data = {**data, "blocks": {"default": {"qtype": blocks_raw}}}
-        elif isinstance(blocks_raw, dict):
-            if blocks_raw and set(blocks_raw) <= _wp_keys:
-                # flat WeightPrecision dict -> wrap as the default block
-                data = {**data, "blocks": {"default": blocks_raw}}
-            else:
-                bad = set(blocks_raw) - {"default"}
-                if bad:
-                    raise ValueError(
-                        f"Per-block-range precision (keys {sorted(bad)}) is not yet "
-                        f"supported. Only 'default' is accepted under precision.blocks."
-                    )
-        return data
+        if "blocks" in data:
+            blocks_raw = data["blocks"]
+            _wp_keys = {"qtype", "granularity", "block_size"}
+            if isinstance(blocks_raw, (int, str)):
+                data = {**data, "blocks": {"default": {"qtype": blocks_raw}}}
+            elif isinstance(blocks_raw, dict):
+                if blocks_raw and set(blocks_raw) <= _wp_keys:
+                    # flat WeightPrecision dict -> wrap as the default block
+                    data = {**data, "blocks": {"default": blocks_raw}}
+                else:
+                    bad = set(blocks_raw) - {"default"}
+                    if bad:
+                        raise ValueError(
+                            f"Per-block-range precision (keys {sorted(bad)}) is not yet "
+                            f"supported. Only 'default' is accepted under precision.blocks."
+                        )
+        # Fill after normalizing, so an authored `blocks` is already in nested form.
+        return {**_precision_contract(), **data}
 
     @model_validator(mode="after")
     def _blocks_has_default(self) -> "PrecisionSchema":
         if "default" not in self.blocks:
             raise ValueError("precision.blocks must contain a 'default' entry.")
         return self
+
+    @model_serializer(mode="wrap")
+    def _serialize(self, handler: Any) -> Any:
+        # Re-narrow the sugar form `_normalize_blocks` widens, so a rewrite gives
+        # back the shape that was authored.
+        data = handler(self)
+        blocks = data.get("blocks")
+        if isinstance(blocks, dict) and set(blocks) == {"default"}:
+            data["blocks"] = blocks["default"]
+        return data

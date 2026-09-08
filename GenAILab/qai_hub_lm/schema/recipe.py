@@ -11,7 +11,10 @@ it. Parallels the dataset specs in ``dataset.py``.
 
 Kwarg fields have no defaults: the backend ``apply()`` signature owns defaults
 (torch/onnx differ), and the lowering forwards only set fields via
-``model_dump(exclude_unset=True)``.
+``model_dump(exclude_unset=True)``. Pre-sim flags (e.g. SpinQuant's rotations) are
+instead REQUIRED: they are the identity of which transforms ran, and a defaulted flag
+is both invisible in the config and deletable by an ``exclude_defaults`` dump, so a
+bare ``- name: SpinQuant`` is a validation error rather than an implicit R1.
 """
 
 from __future__ import annotations
@@ -20,9 +23,9 @@ import inspect
 import typing
 from collections.abc import Callable, Container
 from enum import Enum
-from typing import Annotated, ClassVar, Literal, Union
+from typing import Annotated, Any, ClassVar, Literal, Union
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, model_serializer, model_validator
 
 from .dataset import DatasetSpec, WikitextSpec
 
@@ -55,7 +58,7 @@ class SpinQuantSpec(_TechniqueSpecBase):
     phase = Phase.pre_sim
     fp_weight_allowed = True
 
-    enable_r1: bool = True
+    enable_r1: bool = False
     enable_r2: bool = False
     enable_r3: bool = False
 
@@ -227,6 +230,15 @@ class Recipe(BaseModel, extra="forbid"):
             # single step dict (has a technique name and no component keys)
             if "name" in data:
                 return {"backbone": [data]}
+        return data
+
+    @model_serializer(mode="wrap")
+    def _serialize(self, handler: Any) -> Any:
+        # Re-narrow to the bare-list form `_normalize` widens: the `backbone:` key
+        # only carries information when there is a second component to name.
+        data = handler(self)
+        if self.visual is None:
+            return data["backbone"]
         return data
 
     @model_validator(mode="after")
