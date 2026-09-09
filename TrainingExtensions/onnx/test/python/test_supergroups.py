@@ -145,11 +145,11 @@ class TestDisableSupergroups:
                 self.relu2 = torch.nn.ReLU()
 
             def forward(self, x):
-                x1 = self.conv1(x)
-                x2 = self.conv2(x)
-                x1 = self.relu1(x1)
-                x2 = self.relu2(x2)
-                return x1, x2
+                x = self.conv1(x)
+                x = self.relu1(x)
+                x = self.conv2(x)
+                x = self.relu2(x)
+                return x
 
         model = Model()
 
@@ -160,7 +160,7 @@ class TestDisableSupergroups:
             x,
             onnx_model_path,
             input_names=["input"],
-            output_names=["output_1", "output_2"],
+            output_names=["output"],
             opset_version=16,
             dynamo=False,
         )
@@ -168,9 +168,8 @@ class TestDisableSupergroups:
         sim = QuantizationSimModel(onnx_model)
 
         assert sim.qc_quantize_op_dict["/conv1/Conv_output_0"].enabled
-        assert sim.qc_quantize_op_dict["output_1"].enabled
         assert sim.qc_quantize_op_dict["/conv2/Conv_output_0"].enabled
-        assert sim.qc_quantize_op_dict["output_2"].enabled
+        assert sim.qc_quantize_op_dict["output"].enabled
 
     def test_disable_depthwise_conv_transpose_supergroup(self, tmp_dir):
         class Model(torch.nn.Module):
@@ -182,11 +181,11 @@ class TestDisableSupergroups:
                 self.relu2 = torch.nn.ReLU()
 
             def forward(self, x):
-                x1 = self.conv1(x)
-                x2 = self.conv2(x)
-                x1 = self.relu1(x1)
-                x2 = self.relu2(x2)
-                return x1, x2
+                x = self.conv1(x)
+                x = self.relu1(x)
+                x = self.conv2(x)
+                x = self.relu2(x)
+                return x
 
         model = Model()
 
@@ -197,7 +196,7 @@ class TestDisableSupergroups:
             x,
             onnx_model_path,
             input_names=["input"],
-            output_names=["output_1", "output_2"],
+            output_names=["output"],
             opset_version=16,
             dynamo=False,
         )
@@ -205,9 +204,50 @@ class TestDisableSupergroups:
         sim = QuantizationSimModel(onnx_model)
 
         assert sim.qc_quantize_op_dict["/conv1/ConvTranspose_output_0"].enabled
-        assert sim.qc_quantize_op_dict["output_1"].enabled
         assert sim.qc_quantize_op_dict["/conv2/ConvTranspose_output_0"].enabled
-        assert sim.qc_quantize_op_dict["output_2"].enabled
+        assert sim.qc_quantize_op_dict["output"].enabled
+
+    def test_disable_depthwise_conv_supergroup_trivial_case(self, tmp_dir):
+        """
+        When: in_channels == num_groups == 1
+        Then: Conv should be treated as regular Conv even though in_channels == num_groups.
+              This is a trivial case which can be interpreted as both regular and depthwise conv
+        """
+
+        class Model(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.conv1 = torch.nn.Conv2d(1, 1, 1, groups=1)
+                self.relu1 = torch.nn.ReLU()
+                self.conv2 = torch.nn.ConvTranspose2d(1, 1, 1, groups=1)
+                self.relu2 = torch.nn.ReLU()
+
+            def forward(self, x):
+                x = self.conv1(x)
+                x = self.relu1(x)
+                x = self.conv2(x)
+                x = self.relu2(x)
+                return x
+
+        model = Model()
+
+        onnx_model_path = str(os.path.join(tmp_dir, "depthwise_conv.onnx"))
+        x = torch.randn((1, 1, 24, 24))
+        torch.onnx.export(
+            model,
+            x,
+            onnx_model_path,
+            input_names=["input"],
+            output_names=["output"],
+            opset_version=16,
+            dynamo=False,
+        )
+        onnx_model = onnx.load_model(onnx_model_path)
+        sim = QuantizationSimModel(onnx_model)
+
+        assert not sim.qc_quantize_op_dict["/conv1/Conv_output_0"].enabled
+        assert not sim.qc_quantize_op_dict["/conv2/ConvTranspose_output_0"].enabled
+        assert sim.qc_quantize_op_dict["output"].enabled
 
     def test_dynamic_matmul_add(self):
         """

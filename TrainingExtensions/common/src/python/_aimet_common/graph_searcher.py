@@ -31,40 +31,32 @@ def _check_if_conv3d(op: Op) -> bool:
 
 # TODO: #5597: Remove Conv3d and Depthwise Conv supergroup once HTP support is added
 def _check_if_depthwise_conv(op: Op) -> bool:
-    if op.type != "Conv" and op.type != "ConvTranspose":
+    if op.type not in ("Conv", "ConvTranspose"):
         return False
 
-    if not hasattr(op, "groups") or op.groups == 1:
+    groups = getattr(op, "groups", None) or 1
+
+    if groups == 1:
         return False
 
     if len(op.inputs) < 2:
         raise RuntimeError("Expecting at least two inputs to Conv op.")
 
-    input_shape = op.inputs[0].shape
     weight_shape = op.inputs[1].shape
 
-    groups = op.groups
-
-    # depthwise_conv: each channel in it's own group
-    if input_shape is None or groups != input_shape[1]:
+    if weight_shape is None:
+        # Dynamic weight; cannot determine if depthwise conv or not.
         return False
 
-    # additional validation
-    if weight_shape is not None and op.type == "Conv" and weight_shape[1] != 1:
-        # For Depthwise Conv, weight shape[1] should be 1
-        return False
-    elif (
-        weight_shape is not None
-        and len(op.outputs) > 1
-        and op.outputs[0].shape is not None
-        and op.type == "ConvTranspose"
-        and weight_shape[1] != op.outputs[0].shape[1] / groups
-    ):
-        # For Depthwise Deconv, weight shape[1] should be output_channels / groups
-        return False
-
-    # Indeed depthwise Conv/Deconv
-    return True
+    # Check if Cin == groups
+    if op.type == "Conv":
+        # Conv weight layout: [Cout, Cin / groups, kH, kW]
+        _, in_channels_per_group, *_ = weight_shape
+        return in_channels_per_group == 1
+    else:
+        # ConvTranspose weight layout: [Cin, Cout / groups, kH, kW]
+        in_channels, *_ = weight_shape
+        return in_channels == groups
 
 
 # TODO: #5597: Remove Conv3d and Depthwise Conv supergroup once HTP support is added
