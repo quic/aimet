@@ -82,7 +82,7 @@ fi
 if [ -n "$WF_LABELS" ]; then
   ARGO_ARGS+=(--labels "$WF_LABELS")
 else
-  ARGO_ARGS+=(--labels "workflows.argoproj.io/creator-email=${USERNAME}.at.qualcomm.com,workflows.argoproj.io/creator-preferred-username=${USERNAME}")
+  ARGO_ARGS+=(--labels "workflows.argoproj.io/creator-email=${USERNAME}.at.qti.qualcomm.com,workflows.argoproj.io/creator-preferred-username=${USERNAME}")
 fi
 
 # Resource requests
