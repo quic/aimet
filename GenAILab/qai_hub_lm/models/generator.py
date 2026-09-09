@@ -10,13 +10,13 @@ import functools
 import itertools
 from collections import OrderedDict
 import typing
-from typing import Union
+from typing import Any, Union
 import types
 
 import torch
 import transformers
 from transformers import PretrainedConfig
-from transformers.cache_utils import DynamicCache
+from transformers.cache_utils import Cache, DynamicCache
 from transformers.generation import GenerationMixin
 from transformers.modeling_outputs import CausalLMOutputWithPast
 
@@ -716,6 +716,36 @@ class Generator(GenerationMixin, torch.nn.Module):
             layer_cache_descriptors=self.layer_cache_descriptors,
         )
 
+    def _init_global_outputs(
+        self, past_key_values: DynamicCache | None
+    ) -> dict[str, Any]:
+        return {"past_key_values": _flatten_past_key_values(past_key_values)}
+
+    def _extra_prepare_kwargs(self, global_outputs: dict) -> dict[str, Any]:
+        return {}
+
+    def _wrap_kv_cache(
+        self,
+        past_key_values_list: list[torch.Tensor],
+        global_outputs: dict,
+    ) -> Cache | _FlatListCache:
+        # Convert KV Cache outputs into a cache object compatible with HF's
+        # generation loop.  For hybrid models (linear + full attention) we use
+        # a lightweight wrapper so that ``get_seq_length()`` queries only the
+        # full-attention layers.
+        has_linear = any(
+            d.attention_type == AttentionType.LINEAR
+            for d in self.layer_cache_descriptors
+        )
+        if has_linear:
+            return _FlatListCache(past_key_values_list, self.layer_cache_descriptors)
+        past_key_values = DynamicCache()
+        keys = past_key_values_list[::2]
+        values = past_key_values_list[1::2]
+        for layer_idx, (k, v) in enumerate(zip(keys, values)):
+            past_key_values.update(k, v, layer_idx=layer_idx)
+        return past_key_values
+
     def forward(
         self,
         input_ids: torch.Tensor | None = None,
@@ -741,9 +771,7 @@ class Generator(GenerationMixin, torch.nn.Module):
                 device=input_tokens.device,
             )
 
-        global_outputs: dict[str, Union[torch.Tensor | list[torch.Tensor]]] = {
-            "past_key_values": _flatten_past_key_values(past_key_values)
-        }
+        global_outputs = self._init_global_outputs(past_key_values)
 
         selected_seq_len = self._select_sequence_length(input_tokens.shape[1])
         for (
@@ -766,6 +794,7 @@ class Generator(GenerationMixin, torch.nn.Module):
                 inputs_embeds=input_slice if inputs_embeds is not None else None,
                 position_ids=position_ids_slice,
                 layer_cache_descriptors=self.layer_cache_descriptors,
+                **self._extra_prepare_kwargs(global_outputs),
                 **kwargs_slice,
             )
 
@@ -789,25 +818,10 @@ class Generator(GenerationMixin, torch.nn.Module):
             )
         )
 
-        # Convert KV Cache outputs into a cache object compatible with HF's
-        # generation loop.  For hybrid models (linear + full attention) we use
-        # a lightweight wrapper so that ``get_seq_length()`` queries only the
-        # full-attention layers.
-        has_linear = any(
-            d.attention_type == AttentionType.LINEAR
-            for d in self.layer_cache_descriptors
+        return CausalLMOutputWithPast(
+            logits=logits,
+            past_key_values=self._wrap_kv_cache(past_key_values_list, global_outputs),
         )
-        if has_linear:
-            past_key_values = _FlatListCache(
-                past_key_values_list, self.layer_cache_descriptors
-            )
-        else:
-            past_key_values = DynamicCache()
-            keys = past_key_values_list[::2]
-            values = past_key_values_list[1::2]
-            for layer_idx, (k, v) in enumerate(zip(keys, values)):
-                past_key_values.update(k, v, layer_idx=layer_idx)
-        return CausalLMOutputWithPast(logits=logits, past_key_values=past_key_values)
 
     def prefill(
         self,
@@ -834,9 +848,7 @@ class Generator(GenerationMixin, torch.nn.Module):
                 device=input_tokens.device,
             )
 
-        preconsumed_outputs: dict[str, Union[torch.Tensor | list[torch.Tensor]]] = {
-            "past_key_values": _flatten_past_key_values(past_key_values)
-        }
+        preconsumed_outputs = self._init_global_outputs(past_key_values)
 
         slices_iter = self.slice_inputs_for_inference(
             input_tokens,
@@ -868,6 +880,7 @@ class Generator(GenerationMixin, torch.nn.Module):
                 inputs_embeds=input_slice if inputs_embeds is not None else None,
                 position_ids=position_ids_slice,
                 layer_cache_descriptors=self.layer_cache_descriptors,
+                **self._extra_prepare_kwargs(preconsumed_outputs),
                 **kwargs_slice,
             )
 
@@ -899,6 +912,7 @@ class Generator(GenerationMixin, torch.nn.Module):
             inputs_embeds=input_slice if inputs_embeds is not None else None,
             position_ids=position_ids_slice,
             layer_cache_descriptors=self.layer_cache_descriptors,
+            **self._extra_prepare_kwargs(preconsumed_outputs),
             **kwargs_slice,
         )
         yield prefilled_inputs
