@@ -137,8 +137,13 @@ void quantizeDequantizeFp8(const float* in, uint64_t cnt, const TfEncoding& enco
         quantizeDequantizeFp8Cpu(in, cnt, encoding, out, fp8Spec, runner);
         break;
     case COMP_MODE_GPU:
+#ifdef GPU_QUANTIZATION_ENABLED
+        quantizeDequantizeFp8Gpu(in, cnt, encoding, out, fp8Spec, stream);
+#else
         (void) stream;
-        throw runtime_error("FP8 quantize-dequantize is not supported for GPU mode.");
+        throw runtime_error("Not compiled for GPU mode.");
+#endif
+        break;
     default:
         throw runtime_error("Unknown computation mode.");
     }
@@ -873,8 +878,14 @@ void quantizeDequantizeFp8Broadcast(const float* inTensor, float* outTensor, con
                                           encodingStrides, bcTensorShape, runner);
         break;
     case COMP_MODE_GPU:
+#ifdef GPU_QUANTIZATION_ENABLED
+        quantizeDequantizeFp8BroadcastGpu(inTensor, outTensor, encodings, fp8Spec, numElements, inputStrides,
+                                          encodingStrides, stream);
+#else
         (void) stream;
-        throw std::runtime_error("FP8 broadcast quantize-dequantize is not supported for GPU mode.");
+        throw std::runtime_error("Not compiled for GPU mode.");
+#endif
+        break;
     default:
         throw std::runtime_error("Unknown computation mode.");
     }

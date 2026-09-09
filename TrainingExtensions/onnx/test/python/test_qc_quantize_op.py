@@ -3385,6 +3385,105 @@ def test_one_shot_fp8_e4m3fn_quantize_dequantize_cpu():
     assert not np.array_equal(output, input_arr)
 
 
+@pytest.mark.cuda
+@pytest.mark.parametrize(
+    "precision, reference_dtype",
+    [
+        ("float8e4m3fn", ml_dtypes.float8_e4m3fn),
+        ("float8e5m2", ml_dtypes.float8_e5m2),
+    ],
+)
+def test_one_shot_fp8_quantize_dequantize_cpu_vs_gpu(precision, reference_dtype):
+    """CPU and CUDA FP8 custom ops must agree across grid points and rounding ties."""
+    positive_grid = (
+        np.arange(1, 128, dtype=np.uint8).view(reference_dtype).astype(np.float32)
+    )
+    positive_grid = positive_grid[np.isfinite(positive_grid)]
+    grid = np.concatenate(([0.0], positive_grid))
+    midpoints = (grid[:-1] + grid[1:]) / 2
+    input_arr = np.concatenate((grid, -grid, midpoints, -midpoints)).astype(np.float32)
+
+    def quantize_dequantize(domain):
+        quant_info = libquant_info.QcQuantizeInfo()
+        quant_node = helper.make_node(
+            op_name,
+            inputs=["input"],
+            outputs=["output"],
+            domain=domain,
+            quant_info=libpymo.PtrToInt64(quant_info),
+        )
+        model = create_model_from_node(quant_node, input_arr.shape)
+        session = build_session(model, available_providers)
+        qc_op = QcQuantizeOp(
+            quant_info=quant_info,
+            quant_scheme=QuantScheme.post_training_tf,
+            op_mode=OpMode.oneShotQuantizeDequantize,
+            bitwidth=8,
+            use_symmetric_encodings=True,
+        )
+        qc_op.set_precision(precision)
+
+        output = session.run(None, {"input": input_arr})[0]
+        (encoding,) = qc_op.get_encodings()
+        return output, encoding.delta
+
+    cpu_output, cpu_scale = quantize_dequantize("aimet.customop.cpu")
+    gpu_output, gpu_scale = quantize_dequantize("aimet.customop.cuda")
+
+    # Including the format maximum in calibration pins the scale to one.
+    assert cpu_scale == 1.0
+    assert gpu_scale == cpu_scale
+    assert np.array_equal(gpu_output, cpu_output)
+
+    # Ensure the midpoint inputs exercised rounding rather than passing through.
+    assert not np.array_equal(gpu_output, input_arr)
+
+
+@pytest.mark.cuda
+@pytest.mark.parametrize("precision", ["float8e4m3fn", "float8e5m2"])
+def test_per_channel_fp8_quantize_dequantize_cpu_vs_gpu(precision):
+    """CPU and CUDA per-channel FP8 custom ops must agree bit for bit."""
+    input_shape = (12, 6, 3, 3)
+    quant_axis = 0
+    input_arr = np.random.RandomState(0).randn(*input_shape).astype(np.float32)
+
+    def quantize_dequantize(domain):
+        quant_info = libquant_info.QcQuantizeInfo()
+        qc_op = QcQuantizeOp(
+            quant_info=quant_info,
+            quant_scheme=QuantScheme.post_training_tf,
+            op_mode=OpMode.oneShotQuantizeDequantize,
+            bitwidth=8,
+            use_symmetric_encodings=True,
+            tensor_quantizer_params=TensorQuantizerParams(
+                input_shape, quant_axis, None
+            ),
+        )
+        qc_op.set_precision(precision)
+        qc_op.enable_per_channel_quantization()
+
+        quant_node = helper.make_node(
+            per_channel_op_name,
+            inputs=["input"],
+            outputs=["output"],
+            domain=domain,
+            quant_info=libpymo.PtrToInt64(quant_info),
+        )
+        model = create_model_from_node(quant_node, input_shape)
+        session = build_session(model, available_providers)
+
+        output = session.run(None, {"input": input_arr})[0]
+        return output, [encoding.delta for encoding in qc_op.get_encodings()]
+
+    cpu_output, cpu_scales = quantize_dequantize("aimet.customop.cpu")
+    gpu_output, gpu_scales = quantize_dequantize("aimet.customop.cuda")
+
+    assert len(cpu_scales) == input_shape[quant_axis]
+    assert gpu_scales == cpu_scales
+    assert np.array_equal(gpu_output, cpu_output)
+    assert not np.array_equal(gpu_output, input_arr)
+
+
 @pytest.mark.parametrize("qtype", ["int0", "uint8", "float8e5m2fnuz", "float8"])
 def test_set_invalid_precision_raises(qtype: str):
     quant_info = libquant_info.QcQuantizeInfo()

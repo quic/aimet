@@ -59,7 +59,6 @@ from aimet_onnx.quantsim import (
     _INT32_MINIMUM_SCALE,
     set_lpbq_for_params,
     set_param_type,
-    _DOCUMENTED_QTYPE_ALIASES,
 )
 from aimet_onnx.common.defs import QTYPE_ALIASES
 import aimet_onnx
@@ -86,6 +85,7 @@ from .models.models_for_tests import (
     conv_with_dynamic_weight_static_bias,
     custom_add_model,
     depthwise_transposed_conv_model,
+    elementwise_op_model,
     instance_norm_model,
     layernorm_model,
     linear_split_into_matmul_add,
@@ -3845,14 +3845,10 @@ class TestQuantSim:
             assert all(e.delta > 0.0 and e.offset == 0.0 for e in encodings)
 
     @pytest.mark.parametrize("precision", FP8_PRECISIONS)
-    def test_quantsim_fp8_is_accepted_but_undocumented(self, precision):
-        """
-        FP8 is not advertised in the public docstring while simulation is CPU-only, but
-        it must still be accepted, so that the docstring and the accepted aliases can
-        drift apart deliberately rather than by accident.
-        """
+    def test_quantsim_fp8_is_documented(self, precision):
+        """FP8 is part of the public API once export and CUDA simulation are supported."""
         assert precision in QTYPE_ALIASES
-        assert precision not in QuantizationSimModel.__doc__
+        assert precision in QuantizationSimModel.__doc__
 
         model = single_residual_model().model
         sim = QuantizationSimModel(
@@ -3864,27 +3860,101 @@ class TestQuantSim:
         quantizer = sim.qc_quantize_op_dict[sim.param_names[0]]
         assert quantizer.precision() == aimet_onnx.qtype.from_string(precision)
 
-    def test_fp8_aliases_stay_undocumented(self):
-        """
-        FP8 exports to onnx QDQ but simulation is still CPU-only, so it stays out of the
-        public docstring. Asserted explicitly so that documenting it becomes a deliberate
-        change rather than an accident.
-        """
-        for name in _DOCUMENTED_QTYPE_ALIASES:
-            assert name in QuantizationSimModel.__doc__
-            assert name not in ("float8e4m3fn", "float8e5m2")
-
+    @pytest.mark.cuda
     @pytest.mark.parametrize("precision", FP8_PRECISIONS)
-    def test_quantsim_fp8_rejects_cuda_provider(self, precision):
-        """FP8 QDQ is CPU-only today, so the sim must fail fast rather than at runtime."""
-        model = single_residual_model().model
-        with pytest.raises(RuntimeError, match="CPU only"):
-            QuantizationSimModel(
+    def test_quantsim_fp8_accepts_cuda_provider(self, precision):
+        """An FP8 sim of a conv graph should run under the CUDA provider."""
+        with _seeded_rng():
+            model = single_residual_model().model
+            dummy_input = make_dummy_input(model)
+
+        sim = QuantizationSimModel(
+            copy.deepcopy(model),
+            param_type=precision,
+            activation_type=precision,
+            config_file="htp_v81",
+            providers=["CUDAExecutionProvider"],
+        )
+        sim.compute_encodings([dummy_input])
+
+        assert {
+            node.domain
+            for node in sim.model.model.graph.node
+            if node.op_type == "QcQuantizeOp"
+        } == {"aimet.customop.cuda"}
+        assert any(
+            qtzr.enabled and qtzr.quant_info.usePerChannelMode
+            for qtzr in sim.qc_quantize_op_dict.values()
+        )
+
+        (output,) = sim.session.run(None, dummy_input)
+        assert np.all(np.isfinite(output))
+
+        # Output is quantized: exactly representable as scale * fp8
+        (encoding,) = sim.qc_quantize_op_dict[model.graph.output[0].name].get_encodings()
+        scale = np.float32(encoding.delta)
+        reference_dtype = {
+            "float8e4m3fn": ml_dtypes.float8_e4m3fn,
+            "float8e5m2": ml_dtypes.float8_e5m2,
+        }[precision]
+        on_grid = (output / scale).astype(reference_dtype).astype(np.float32) * scale
+        assert np.array_equal(output, on_grid)
+
+    @pytest.mark.cuda
+    @pytest.mark.parametrize("precision", FP8_PRECISIONS)
+    def test_quantsim_fp8_cuda_matches_cpu(self, precision):
+        """
+        FP8 simulation must give identical results on CPU and CUDA.
+
+        Add and Mul are elementwise, so both providers feed every quantizer the same
+        tensors; a conv graph could not be compared exactly, as cuDNN's accumulation
+        order can round a value to either side of an FP8 boundary.
+        """
+        with _seeded_rng():
+            model = elementwise_op_model().model
+            dummy_input = make_dummy_input(model)
+
+        sims = {}
+        for tag, providers in (
+            ("cpu", CPU_PROVIDERS),
+            ("cuda", ["CUDAExecutionProvider"]),
+        ):
+            sim = QuantizationSimModel(
                 copy.deepcopy(model),
                 param_type=precision,
                 activation_type=precision,
-                providers=["CUDAExecutionProvider"],
+                quant_scheme="min_max",
+                providers=providers,
             )
+            sim.compute_encodings([dummy_input])
+            sims[tag] = sim
+
+        cuda_domains = {
+            node.domain
+            for node in sims["cuda"].model.model.graph.node
+            if node.op_type == "QcQuantizeOp"
+        }
+        assert cuda_domains == {"aimet.customop.cuda"}
+
+        quantized = 0
+        for name, cpu_quantizer in sims["cpu"].qc_quantize_op_dict.items():
+            if not cpu_quantizer.enabled:
+                continue
+            quantized += 1
+            cuda_quantizer = sims["cuda"].qc_quantize_op_dict[name]
+            assert [encoding.delta for encoding in cpu_quantizer.get_encodings()] == [
+                encoding.delta for encoding in cuda_quantizer.get_encodings()
+            ]
+        assert quantized
+
+        (expected,) = sims["cpu"].session.run(None, dummy_input)
+        (actual,) = sims["cuda"].session.run(None, dummy_input)
+        assert np.array_equal(actual, expected)
+
+        (float_output,) = ort.InferenceSession(
+            model.SerializeToString(), providers=CPU_PROVIDERS
+        ).run(None, dummy_input)
+        assert not np.array_equal(expected, float_output)
 
     @pytest.mark.parametrize("precision", FP8_PRECISIONS)
     def test_quantsim_fp8_exports_2_0_0_encodings(self, precision):

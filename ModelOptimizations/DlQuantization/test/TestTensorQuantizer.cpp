@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: BSD-3-Clause
 
 #include <gtest/gtest.h>
+#include <cmath>
+#include <limits>
 #include <random>
 #include <type_traits>
 
@@ -295,6 +297,217 @@ TEST_F(TestTensorQuantizer, SANITY_QuantizeDequantizePerChannelTensorSymmetricBl
 }
 
 #ifdef GPU_QUANTIZATION_ENABLED
+
+// FP8 QDQ should be bit-exact across CPU and GPU.
+TEST_F(TestTensorQuantizer, Fp8PerTensorQdqCpuGpuBitExact)
+{
+    const TensorDims tensorShape = {(TensorDim) data4.size()};
+
+    TfEncoding encoding;
+    encoding.bw     = 8;
+    encoding.delta  = 0.5;
+    encoding.offset = 0;
+    encoding.min    = -448.0 * encoding.delta;
+    encoding.max    = 448.0 * encoding.delta;
+
+    BlockTensorQuantizer cpuQuantizer({}, QuantizationType::Fp8E4M3FN(), QUANTIZATION_TF);
+    cpuQuantizer.setEncodings({encoding});
+    std::vector<float> cpuOutput(data4.size(), 0);
+    cpuQuantizer.quantizeDequantize(data4.data(), cpuOutput.data(), tensorShape, false);
+
+    BlockTensorQuantizer gpuQuantizer({}, QuantizationType::Fp8E4M3FN(), QUANTIZATION_TF);
+    gpuQuantizer.setEncodings({encoding});
+    Blob<GpuDevice<float>> inputBlob(data4.data(), data4.size());
+    std::vector<float> gpuOutput(data4.size(), 0);
+    Blob<GpuDevice<float>> outputBlob(gpuOutput.data(), gpuOutput.size());
+    gpuQuantizer.quantizeDequantize(inputBlob.getDataPtrOnDevice(), outputBlob.getDataPtrOnDevice(), tensorShape, true);
+    const float* gpuResult = outputBlob.getDataPtrOnCpu();
+
+    for (size_t i = 0; i < data4.size(); i++)
+    {
+        EXPECT_EQ(cpuOutput[i], gpuResult[i]) << "index " << i << " input " << data4[i];
+    }
+}
+
+// Per-channel FP8 exercises broadcast scale selection.
+TEST_F(TestTensorQuantizer, Fp8PerChannelQdqCpuGpuBitExact)
+{
+    const TensorDims tensorShape = {2, 3, 2, 2};
+    const TensorDims blockShape  = {1, 3, 1, 1};
+
+    Encodings encodings;
+    for (int channel = 0; channel < 3; channel++)
+    {
+        TfEncoding encoding;
+        encoding.bw     = 8;
+        encoding.delta  = 0.25 * (channel + 1);
+        encoding.offset = 0;
+        encoding.min    = -448.0 * encoding.delta;
+        encoding.max    = 448.0 * encoding.delta;
+        encodings.push_back(encoding);
+    }
+
+    BlockTensorQuantizer cpuQuantizer(blockShape, QuantizationType::Fp8E4M3FN(), QUANTIZATION_TF);
+    cpuQuantizer.setEncodings(encodings);
+    std::vector<float> cpuOutput(data1.size(), 0);
+    cpuQuantizer.quantizeDequantize(data1.data(), cpuOutput.data(), tensorShape, false);
+
+    BlockTensorQuantizer gpuQuantizer(blockShape, QuantizationType::Fp8E4M3FN(), QUANTIZATION_TF);
+    gpuQuantizer.setEncodings(encodings);
+    Blob<GpuDevice<float>> inputBlob(data1.data(), data1.size());
+    std::vector<float> gpuOutput(data1.size(), 0);
+    Blob<GpuDevice<float>> outputBlob(gpuOutput.data(), gpuOutput.size());
+    gpuQuantizer.quantizeDequantize(inputBlob.getDataPtrOnDevice(), outputBlob.getDataPtrOnDevice(), tensorShape, true);
+    const float* gpuResult = outputBlob.getDataPtrOnCpu();
+
+    for (size_t i = 0; i < data1.size(); i++)
+    {
+        EXPECT_EQ(cpuOutput[i], gpuResult[i]) << "index " << i << " input " << data1[i];
+    }
+}
+
+
+// E5M2 exercises a different exponent and mantissa layout.
+TEST_F(TestTensorQuantizer, Fp8E5M2PerTensorQdqCpuGpuBitExact)
+{
+    const TensorDims tensorShape = {(TensorDim) data4.size()};
+
+    TfEncoding encoding;
+    encoding.bw     = 8;
+    encoding.delta  = 0.5;
+    encoding.offset = 0;
+    encoding.min    = -57344.0 * encoding.delta;
+    encoding.max    = 57344.0 * encoding.delta;
+
+    BlockTensorQuantizer cpuQuantizer({}, QuantizationType::Fp8E5M2(), QUANTIZATION_TF);
+    cpuQuantizer.setEncodings({encoding});
+    std::vector<float> cpuOutput(data4.size(), 0);
+    cpuQuantizer.quantizeDequantize(data4.data(), cpuOutput.data(), tensorShape, false);
+
+    BlockTensorQuantizer gpuQuantizer({}, QuantizationType::Fp8E5M2(), QUANTIZATION_TF);
+    gpuQuantizer.setEncodings({encoding});
+    Blob<GpuDevice<float>> inputBlob(data4.data(), data4.size());
+    std::vector<float> gpuOutput(data4.size(), 0);
+    Blob<GpuDevice<float>> outputBlob(gpuOutput.data(), gpuOutput.size());
+    gpuQuantizer.quantizeDequantize(inputBlob.getDataPtrOnDevice(), outputBlob.getDataPtrOnDevice(), tensorShape, true);
+    const float* gpuResult = outputBlob.getDataPtrOnCpu();
+
+    for (size_t i = 0; i < data4.size(); i++)
+    {
+        EXPECT_EQ(cpuOutput[i], gpuResult[i]) << "index " << i << " input " << data4[i];
+    }
+}
+
+
+TEST_F(TestTensorQuantizer, Fp8E5M2PerChannelQdqCpuGpuBitExact)
+{
+    const TensorDims tensorShape = {2, 3, 2, 2};
+    const TensorDims blockShape  = {1, 3, 1, 1};
+
+    Encodings encodings;
+    for (int channel = 0; channel < 3; channel++)
+    {
+        TfEncoding encoding;
+        encoding.bw     = 8;
+        encoding.delta  = 0.25 * (channel + 1);
+        encoding.offset = 0;
+        encoding.min    = -57344.0 * encoding.delta;
+        encoding.max    = 57344.0 * encoding.delta;
+        encodings.push_back(encoding);
+    }
+
+    BlockTensorQuantizer cpuQuantizer(blockShape, QuantizationType::Fp8E5M2(), QUANTIZATION_TF);
+    cpuQuantizer.setEncodings(encodings);
+    std::vector<float> cpuOutput(data1.size(), 0);
+    cpuQuantizer.quantizeDequantize(data1.data(), cpuOutput.data(), tensorShape, false);
+
+    BlockTensorQuantizer gpuQuantizer(blockShape, QuantizationType::Fp8E5M2(), QUANTIZATION_TF);
+    gpuQuantizer.setEncodings(encodings);
+    Blob<GpuDevice<float>> inputBlob(data1.data(), data1.size());
+    std::vector<float> gpuOutput(data1.size(), 0);
+    Blob<GpuDevice<float>> outputBlob(gpuOutput.data(), gpuOutput.size());
+    gpuQuantizer.quantizeDequantize(inputBlob.getDataPtrOnDevice(), outputBlob.getDataPtrOnDevice(), tensorShape, true);
+    const float* gpuResult = outputBlob.getDataPtrOnCpu();
+
+    for (size_t i = 0; i < data1.size(); i++)
+    {
+        EXPECT_EQ(cpuOutput[i], gpuResult[i]) << "index " << i << " input " << data1[i];
+    }
+}
+
+
+TEST_F(TestTensorQuantizer, Fp8QdqCpuGpuBitExactAtEdgeCases)
+{
+    const std::vector<QuantizationType> qtypes = {
+        QuantizationType::Fp8E4M3FN(),
+        QuantizationType::Fp8E5M2(),
+    };
+
+    for (const auto& qtype: qtypes)
+    {
+        const auto& fp8Spec           = qtype.floatSpec();
+        const float maxValue          = static_cast<float>(fp8Spec.maxValue);
+        const float scale             = 0.3f;
+        const float stepAtOne         = std::ldexp(1.0f, -fp8Spec.mantissaBits);
+        const float smallestSubnormal = std::ldexp(1.0f, fp8Spec.exponentMin - fp8Spec.mantissaBits);
+        std::vector<float> input = {
+            -std::numeric_limits<float>::infinity(),
+            -2.0f * maxValue * scale,
+            -maxValue * scale,
+            -(1.0f + 1.5f * stepAtOne) * scale,
+            -(1.0f + 0.5f * stepAtOne) * scale,
+            -0.5f * smallestSubnormal * scale,
+            -0.0f,
+            0.0f,
+            0.5f * smallestSubnormal * scale,
+            (1.0f + 0.5f * stepAtOne) * scale,
+            (1.0f + 1.5f * stepAtOne) * scale,
+            maxValue * scale,
+            2.0f * maxValue * scale,
+            std::numeric_limits<float>::infinity(),
+            std::numeric_limits<float>::quiet_NaN(),
+        };
+        const TensorDims tensorShape = {static_cast<TensorDim>(input.size())};
+
+        TfEncoding encoding;
+        encoding.bw     = 8;
+        encoding.delta  = scale;
+        encoding.offset = 0;
+        encoding.min    = -maxValue * scale;
+        encoding.max    = maxValue * scale;
+
+        BlockTensorQuantizer cpuQuantizer({}, qtype, QUANTIZATION_TF);
+        cpuQuantizer.setEncodings({encoding});
+        std::vector<float> cpuOutput(input.size(), 0);
+        cpuQuantizer.quantizeDequantize(input.data(), cpuOutput.data(), tensorShape, false);
+
+        BlockTensorQuantizer gpuQuantizer({}, qtype, QUANTIZATION_TF);
+        gpuQuantizer.setEncodings({encoding});
+        Blob<GpuDevice<float>> inputBlob(input.data(), input.size());
+        std::vector<float> gpuOutput(input.size(), 0);
+        Blob<GpuDevice<float>> outputBlob(gpuOutput.data(), gpuOutput.size());
+        gpuQuantizer.quantizeDequantize(inputBlob.getDataPtrOnDevice(), outputBlob.getDataPtrOnDevice(), tensorShape,
+                                        true);
+        const float* gpuResult = outputBlob.getDataPtrOnCpu();
+
+        for (size_t i = 0; i < input.size(); i++)
+        {
+            if (std::isnan(cpuOutput[i]))
+            {
+                EXPECT_TRUE(std::isnan(gpuResult[i])) << "index " << i;
+            }
+            else
+            {
+                EXPECT_EQ(cpuOutput[i], gpuResult[i]) << "index " << i << " input " << input[i];
+                if (cpuOutput[i] == 0.0f)
+                {
+                    EXPECT_EQ(std::signbit(cpuOutput[i]), std::signbit(gpuResult[i])) << "index " << i;
+                }
+            }
+        }
+    }
+}
+
 
 TEST_F(TestTensorQuantizer, SanityTestGpuBlocked)
 {

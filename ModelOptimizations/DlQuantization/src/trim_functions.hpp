@@ -66,6 +66,16 @@ void quantizeDequantizeCpu(const DTYPE* in, uint64_t cnt, const TfEncoding& enco
 void quantizeDequantizeFp8Cpu(const float* in, uint64_t cnt, const TfEncoding& encoding, float* out,
                               const FloatQuantizationSpec& fp8Spec, IForLoopRunner* runner = nullptr);
 
+#ifdef GPU_QUANTIZATION_ENABLED
+void quantizeDequantizeFp8Gpu(const float* in, uint64_t cnt, const TfEncoding& encoding, float* out,
+                              const FloatQuantizationSpec& fp8Spec, void* stream);
+
+void quantizeDequantizeFp8BroadcastGpu(const float* in, float* out, const Encodings& encodings,
+                                       const FloatQuantizationSpec& fp8Spec, int64_t numElements,
+                                       const TensorDims& inputStrides, const TensorDims& encodingStrides,
+                                       void* stream);
+#endif   // GPU_QUANTIZATION_ENABLED
+
 void quantizeDequantizeFp8Broadcast(const float* inTensor, float* outTensor, const Encodings& encodings,
                                     const FloatQuantizationSpec& fp8Spec, const TensorDims& inputShape,
                                     const TensorDims& encodingShape, ComputationMode mode, void* stream = nullptr,
