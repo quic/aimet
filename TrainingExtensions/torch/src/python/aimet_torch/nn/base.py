@@ -755,24 +755,23 @@ class BaseQuantizationMixin(abc.ABC):
     @torch.no_grad()
     def set_weight_quantizer_to_mxfp4_int8(self, block_size: int = 32):
         """
-        Set weight quantizer to MXFP4 quantizer.
+        Set weight quantizer to MXFP4-INT8 quantizer.
 
         Assumes weights are already quantize-dequantized to MXFP4 format.
 
         :param block_size: Block size along the last dimension for MXFP4 quantization.
         """
         # 0. If there is no "weight" parameter and/or param_quantizer, exit early
-        if not hasattr(self, "weight") or self.weight is None:
-            return
         if (
-            "weight" not in self.param_quantizers
-            or self.param_quantizers["weight"] is None
+            not hasattr(self, "weight")
+            or self.weight is None
+            or "weight" not in self.param_quantizers
         ):
             return
 
         if not isinstance(self, (nn.Linear, nn.Conv2d, nn.Conv1d, nn.Conv3d)):
             raise RuntimeError(
-                "MxFP4 is only implemented in QAIRT for nn.Linear and nn.Conv2d modules"
+                "MXFP4 is only implemented in QAIRT for nn.Linear and nn.Conv2d modules"
             )
 
         weight = self.weight
@@ -846,6 +845,103 @@ class BaseQuantizationMixin(abc.ABC):
         # 5. Replace the weight tensor with the dequantized tensor from step 3, which holds the e2m1 encodings
         self.weight = torch.nn.Parameter(
             dequantized_weight.to(weight.dtype), requires_grad=weight.requires_grad
+        )
+
+    @torch.no_grad()
+    def set_weight_quantizer_to_nvfp4_int8(
+        self,
+        scale_q: torch.Tensor,
+        meta_scale: torch.Tensor | float,
+    ):
+        """
+        Set weight quantizer to NVFP4-INT8 quantizer.
+
+        Args:
+          scale_q (torch.Tensor): Blockwise NVFP4 scale tensor od dtype float8 and
+            shape (out_channels, in_channels // 16)
+          meta_scale (torch.Tensor | float): Scalar meta scale tensor or float value
+        """
+        if (
+            not hasattr(self, "weight")
+            or self.weight is None
+            or "weight" not in self.param_quantizers
+        ):
+            return
+
+        if not isinstance(self, (nn.Linear, nn.Conv2d, nn.Conv1d, nn.Conv3d)):
+            raise RuntimeError("NVFP4 is only for nn.Linear and nn.Conv2d modules")
+
+        if scale_q.dtype not in (torch.float8_e4m3fn, torch.float8_e4m3fnuz):
+            raise RuntimeError(
+                "NVFP4 quantization requires scale to be float8_e4m3, "
+                f"but got scale with dtype {scale_q.dtype}."
+            )
+
+        # NVFP4 block size is strictly fixed to 16 elements per block
+        nvfp4_block_size = 16
+        out_channels, in_channels, *others = self.weight.shape
+
+        if in_channels % nvfp4_block_size != 0:
+            raise RuntimeError(
+                f"NVFP4 block size is strictly fixed to {nvfp4_block_size}. "
+                f"Got incompatible in_channels={in_channels} which is "
+                f"not divisible by {nvfp4_block_size}."
+            )
+
+        expected_scale_shape = (
+            out_channels,
+            in_channels // nvfp4_block_size,
+            *(1 for _ in others),
+        )
+
+        if scale_q.shape != expected_scale_shape:
+            raise RuntimeError(
+                f"Expected scale shape {expected_scale_shape} for NVFP4 quantization, "
+                f"but got {scale_q.shape}."
+            )
+
+        if not isinstance(meta_scale, torch.Tensor):
+            meta_scale = torch.full(
+                (),
+                fill_value=meta_scale,
+                dtype=torch.float32,
+                device=self.weight.device,
+            )
+
+        if meta_scale.shape != ():
+            raise RuntimeError(
+                "Expected 0-dimensional scalar meta_scale for NVFP4 quantization, "
+                f"but got meta_scale with shape {meta_scale.shape}."
+            )
+
+        meta_scale = meta_scale.to(self.weight.device)
+        scale = meta_scale * scale_q.to(self.weight.device, meta_scale.dtype)
+
+        nvfp4_encoding = _NVFP4Encoding(
+            scale=scale,
+            meta_scale=meta_scale,
+            block_size=tuple(
+                weight_dim // scale_dim
+                for weight_dim, scale_dim in zip(self.weight.shape, scale.shape)
+            ),
+        )
+
+        # Replace weight with pre-QDQ-ed NVFP4 weight
+        weight_qdq = nvfp4_encoding.quantize_dequantize(self.weight).to(
+            self.weight.dtype
+        )
+        weight_qdq = weight_qdq.as_subclass(DequantizedTensor)
+        weight_qdq.encoding = nvfp4_encoding
+        self.weight = torch.nn.Parameter(
+            weight_qdq, requires_grad=self.weight.requires_grad
+        )
+
+        # Insert per-channel int8 param quanitzer
+        self.param_quantizers["weight"] = QuantizeDequantize(
+            shape=(out_channels, 1, *(1 for _ in others)),
+            qmin=-128,
+            qmax=127,
+            symmetric=True,
         )
 
     def _remove_input_quantizers(self, indices: Union[int, Iterable[int]] = None):

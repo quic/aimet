@@ -32,6 +32,11 @@ from aimet_torch.v2.quantization.affine import (
     QuantizeDequantize,
     GroupedBlockQuantizeDequantize,
 )
+from aimet_torch.quantization.float.encoding import _NVFP4Encoding
+from aimet_torch.quantization.float.quantizer import (
+    _float_quantize_dequantize,
+    _float4_e2m1fn,
+)
 import aimet_torch.v2 as aimet
 from aimet_torch.v2.nn import (
     QuantizationMixin,
@@ -2634,3 +2639,113 @@ def test_htp_overflow_protection_frozen_no_adjustment_needed(module_factory):
 
     assert not [w for w in caught if "frozen weight quantizer" in str(w.message)]
     assert torch.equal(weight_qtzr.get_scale(), frozen_weight_scale)
+
+
+@torch.no_grad()
+@pytest.mark.parametrize("dtype", [torch.float32, torch.float16])
+def test_nvfp4_int8(dtype):
+    """
+    When: Call set_weight_quantizer_to_nvfp4_int8 on a QuantizedLinear
+    Then: The weight should be quantized to NVFP4 followed by INt8 per-channel
+    """
+    qlinear = QuantizedLinear(64, 64, bias=False, dtype=dtype)
+    weight = qlinear.weight.clone()
+    scale_q = (
+        torch.randn(64, 4)
+        .abs()
+        .clamp_min(torch.finfo(torch.float8_e4m3fn).tiny)
+        .to(torch.float8_e4m3fn)
+    )
+    meta_scale = 0.1
+    qlinear.set_weight_quantizer_to_nvfp4_int8(scale_q, meta_scale)
+
+    assert qlinear.weight.dtype == dtype
+    assert isinstance(qlinear.weight, DequantizedTensor)
+    assert isinstance(qlinear.weight.encoding, _NVFP4Encoding)
+    assert qlinear.weight.encoding.scale.dtype == torch.float32
+    assert qlinear.weight.encoding.meta_scale.dtype == torch.float32
+
+    weight_qtzr = qlinear.param_quantizers["weight"]
+    assert isinstance(weight_qtzr, QuantizeDequantize)
+    assert weight_qtzr.shape == (64, 1)
+    assert weight_qtzr.block_size is None
+    assert weight_qtzr.symmetric
+
+    inp = torch.randn(1, 64, dtype=dtype)
+    out = qlinear(inp)
+    weight_nvfp4 = _float_quantize_dequantize(
+        weight,
+        _float4_e2m1fn,
+        meta_scale * scale_q.to(torch.float32),
+        (1, 16),
+    ).to(dtype)
+    weight_nvfp4_int8 = weight_qtzr(weight_nvfp4)
+    expected_output = inp @ weight_nvfp4_int8.T
+    assert torch.allclose(out, expected_output)
+
+
+def test_nvfp4_int8_error():
+    """
+    When: Call set_weight_quantizer_to_nvfp4_int8 with input channel not divisible by 16
+    Then: Raise runtime error
+    """
+    with pytest.raises(RuntimeError, match="not divisible by 16"):
+        qlinear = QuantizedLinear(63, 64, bias=False)
+        scale_q = (
+            torch.randn(64, 4)
+            .abs()
+            .clamp_min(torch.finfo(torch.float8_e4m3fn).tiny)
+            .to(torch.float8_e4m3fn)
+        )
+        meta_scale = 0.1
+        qlinear.set_weight_quantizer_to_nvfp4_int8(scale_q, meta_scale)
+
+    """
+    When: Call set_weight_quantizer_to_nvfp4_int8 with invalid scale shape or dtype
+    Then: Raise runtime error
+    """
+    with pytest.raises(
+        RuntimeError,
+        match=r"Expected scale shape \(64, 4\) for NVFP4 quantization",
+    ):
+        qlinear = QuantizedLinear(64, 64, bias=False)
+        scale_q = (
+            torch.randn(64, 3)
+            .abs()
+            .clamp_min(torch.finfo(torch.float8_e4m3fn).tiny)
+            .to(torch.float8_e4m3fn)
+        )
+        meta_scale = 0.1
+        qlinear.set_weight_quantizer_to_nvfp4_int8(scale_q, meta_scale)
+
+    with pytest.raises(
+        RuntimeError,
+        match="NVFP4 quantization requires scale to be float8_e4m3",
+    ):
+        qlinear = QuantizedLinear(64, 64, bias=False)
+        scale_q = (
+            torch.randn(64, 3)
+            .abs()
+            .clamp_min(torch.finfo(torch.float8_e5m2).tiny)
+            .to(torch.float8_e5m2)
+        )
+        meta_scale = 0.1
+        qlinear.set_weight_quantizer_to_nvfp4_int8(scale_q, meta_scale)
+
+    """
+    When: Call set_weight_quantizer_to_nvfp4_int8 with non-scalar meta scale
+    Then: Raise runtime error
+    """
+    with pytest.raises(
+        RuntimeError,
+        match="Expected 0-dimensional scalar meta_scale for NVFP4 quantization",
+    ):
+        qlinear = QuantizedLinear(64, 64, bias=False)
+        scale_q = (
+            torch.randn(64, 4)
+            .abs()
+            .clamp_min(torch.finfo(torch.float8_e4m3fn).tiny)
+            .to(torch.float8_e4m3fn)
+        )
+        meta_scale = torch.tensor([0.1])
+        qlinear.set_weight_quantizer_to_nvfp4_int8(scale_q, meta_scale)
