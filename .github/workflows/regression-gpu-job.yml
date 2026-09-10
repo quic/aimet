@@ -108,6 +108,26 @@ jobs:
           sudo apt-get clean
           sudo rm -rf /var/lib/apt/lists/*
 
+      - name: Mint AI Hub Models reader token
+        id: aihm-token
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ vars.READER_APP_ID }}
+          private-key: ${{ secrets.READER_APP_PRIVATE_KEY }}
+          owner: qcom-ai-hub
+          repositories: ai-hub-models-internal
+
+      - name: Clone AI Hub Models source
+        env:
+          GH_TOKEN: ${{ steps.aihm-token.outputs.token }}
+        run: |
+          set -euo pipefail
+          AIHM_SRC_DIR="${RUNNER_TEMP}/ai-hub-models-internal"
+          git clone --depth=1 --branch main \
+            "https://x-access-token:${GH_TOKEN}@github.com/qcom-ai-hub/ai-hub-models-internal.git" \
+            "$AIHM_SRC_DIR"
+          echo "AIHM_SRC_DIR=$AIHM_SRC_DIR" >> "$GITHUB_ENV"
+
       - name: Authenticate AWS
         uses: aws-actions/configure-aws-credentials@v4
         with:
@@ -216,17 +236,16 @@ jobs:
               echo "::warning::qai-hub-models install $model_name failed"
               install_failures="$install_failures $model_name"
             fi
-            # qai-hub-models' PyPI wheel excludes the `scripts` subpackage (dev-only),
-            # so call the underlying util directly instead of `-m qai_hub_models.scripts.setup_external_repos`.
-            if ! python -c "from qai_hub_models.utils.external_repo import setup_external_repos; from qai_hub_models.utils.path_helpers import QAIHM_MODELS_ROOT; setup_external_repos(QAIHM_MODELS_ROOT / '$model_name')"; then
-              echo "::warning::setup_external_repos $model_name failed"
-              install_failures="$install_failures $model_name"
-            fi
             echo "::endgroup::"
           done
           if [ -n "$install_failures" ]; then
             echo "::warning::Model installs failed for:$install_failures"
           fi
+
+          # qai-hub-models' PyPI wheel excludes the `scripts` subpackage (dev-only),
+          # so run the script straight out of the cloned source instead; it imports
+          # everything else from the pip-installed package normally.
+          python "$AIHM_SRC_DIR/src/qai_hub_models/scripts/setup_external_repos.py" --all
 
           python -c "import aimet_${{ inputs.framework }} as aimet; print('AIMET version:', aimet.__version__)"
 
