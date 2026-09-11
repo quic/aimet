@@ -1478,7 +1478,18 @@ class ConnectedGraph(AimetCommonConnectedGraph):
                 flattened_shapes = _flatten_lists(output_tensor_shapes)
                 op.output_shape = flattened_shapes[0]
                 op.dotted_name = self._module_to_name[op_module]
-                _fill_groups_info(op, op_module)
+                if isinstance(
+                    op_module,
+                    (
+                        torch.nn.Conv1d,
+                        torch.nn.Conv2d,
+                        torch.nn.Conv3d,
+                        torch.nn.ConvTranspose1d,
+                        torch.nn.ConvTranspose2d,
+                        torch.nn.ConvTranspose3d,
+                    ),
+                ):
+                    op.groups = op_module.groups
 
                 for inp, shape in zip(op.inputs, input_tensor_shapes):
                     if inp.shape is None:
@@ -1875,17 +1886,6 @@ def _create_module_to_op_dict(ops: List[Op]) -> Dict[torch.nn.Module, Op]:
         if op.get_module():
             module_to_op_dict[op.get_module()] = op
     return module_to_op_dict
-
-
-def _fill_groups_info(op: Op, module: torch.nn.Module):
-    """
-    Fill in groups info for convolution ops. If op is not a conv op, groups is unchanged.
-    :param op: Connected graph op to fill groups info for
-    :param module: Pytorch module to check for groups
-    """
-
-    if op.type in "Conv":
-        op.groups = module.groups
 
 
 def _flatten_lists(nested_list: List[List]) -> List:
