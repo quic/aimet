@@ -1744,7 +1744,6 @@ class Grace(TextEvaluationMetric):
         generation_config = build_generation_config(
             model,
             tokenizer,
-            do_sample=False,
             max_new_tokens=max_new_tokens,
         )
         model.generation_config = generation_config
