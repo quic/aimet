@@ -8,7 +8,6 @@ from typing import Callable, Collection, Dict, List, Optional, Tuple
 from dataclasses import dataclass
 import numpy as np
 import torch
-import tqdm
 import tempfile
 import gc
 import onnx_ir
@@ -18,6 +17,7 @@ from aimet_onnx.common.utils import AimetLogger  # pylint: disable=import-error
 from aimet_onnx.common.early_stopping import (  # pylint: disable=import-error
     _create_early_stopping,
 )
+from aimet_onnx.common.progress import progress_bar  # pylint: disable=import-error
 from aimet_onnx.experimental.adascale.utils import (
     convert_to_torch,
     change_tensor_device_placement,
@@ -440,7 +440,7 @@ class AdaScale:
 
         pytorch_block.to(device)
         with torch.set_grad_enabled(True):
-            for iteration in tqdm.tqdm(range(num_iterations)):
+            for iteration in progress_bar(range(num_iterations)):
                 data_idx = iteration % len(torch_fp_input)
                 fp_input = torch_fp_input[data_idx]
                 quant_input = torch_quant_input[iteration % len(torch_quant_input)]

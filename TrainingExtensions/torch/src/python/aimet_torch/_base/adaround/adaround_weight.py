@@ -12,7 +12,7 @@ import tempfile
 from typing import Tuple, Union, Dict, List, Callable, Optional, Any
 import torch
 from torch.utils.data import DataLoader
-from tqdm import tqdm
+from aimet_torch.common.progress import progress_bar
 
 # Import AIMET specific modules
 from aimet_torch.common.utils import AimetLogger, convert_configs_values_to_bool
@@ -366,7 +366,7 @@ class AdaroundBase(ABC):
                         AdaroundSupportedModules,
                     )
 
-                    for block_cfg, modules in tqdm(block_list, desc="block"):
+                    for block_cfg, modules in progress_bar(block_list, desc="block"):
                         if block_cfg is None:  # doesn't belong to a cached block
                             cls._run_adaround_model(
                                 modules,
@@ -449,7 +449,7 @@ class AdaroundBase(ABC):
         :param cached_quant_dataset: Cached dataset for the quant model
         """
         # pylint: disable=too-many-arguments, too-many-locals, protected-access
-        for name, module in tqdm(modules):
+        for name, module in progress_bar(modules):
             if isinstance(module, AdaroundSupportedModules):
                 # Using name, get corresponding quantized wrapper module from Quant sim model
                 quant_wrapper = cls._get_quant_wrapper(quant_sim_model, name)

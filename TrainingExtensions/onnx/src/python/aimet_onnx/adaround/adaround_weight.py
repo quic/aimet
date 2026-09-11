@@ -9,7 +9,7 @@
 import copy
 import tempfile
 from typing import Dict, List, Collection, Optional
-from tqdm import tqdm
+from aimet_onnx.common.progress import progress_bar  # pylint: disable=import-error
 import numpy as np
 
 # Import AIMET specific modules
@@ -96,7 +96,7 @@ class Adaround:
             )
 
             # AdaRound must be applied to modules in the order of occurrence
-            for module in tqdm(sim.connected_graph.ordered_ops):
+            for module in progress_bar(sim.connected_graph.ordered_ops):
                 name = module.name
                 module_info = model_data.module_to_info[name]
 

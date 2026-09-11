@@ -25,7 +25,7 @@ from typing import Callable, Dict, Iterable, List, Optional
 
 import numpy as np
 import onnxruntime as ort
-from tqdm import tqdm
+from aimet_onnx.common.progress import progress_bar  # pylint: disable=import-error
 
 from aimet_onnx.quantsim import QuantizationSimModel
 from aimet_onnx.utils import disable_quantizers
@@ -184,7 +184,7 @@ def analyze_per_quantizer_sensitivity(
     # Disable every quantizer for the duration of the sweep (restored on exit),
     # then enable one group at a time to isolate its contribution.
     with disable_quantizers(sim, sim.qc_quantize_op_dict.keys()):
-        for key, names in tqdm(
+        for key, names in progress_bar(
             groups.items(),
             total=len(groups),
             desc=f"Per-quantizer sensitivity ({metric.name})",

@@ -14,7 +14,7 @@ from typing import Callable, List, Optional, Set, Tuple
 import torch
 from torch.nn import functional
 from torch.utils.data import DataLoader
-from tqdm import tqdm
+from aimet_torch.common.progress import progress_bar
 
 from aimet_torch.common.utils import AimetLogger
 from safetensors.torch import save_file, load_file
@@ -434,7 +434,7 @@ class SequentialMseBase(ABC):
         num_optimizable = sum(
             _is_optimizable(name_to_quant_module.get(name)) for name, _ in fp32_modules
         )
-        progress_bar = tqdm(total=num_optimizable, desc="Sequential MSE", unit="module")
+        pbar = progress_bar(total=num_optimizable, desc="Sequential MSE", unit="module")
 
         for module_qualified_name, fp32_module in fp32_modules:
             quant_module = name_to_quant_module.get(module_qualified_name)
@@ -482,9 +482,9 @@ class SequentialMseBase(ABC):
             if cache_dir:
                 cls.save_to_cache(module_qualified_name, quant_module, cache_dir)
 
-            progress_bar.update(1)
+            pbar.update(1)
 
-        progress_bar.close()
+        pbar.close()
 
     @classmethod
     def load_cached_optimized_params(

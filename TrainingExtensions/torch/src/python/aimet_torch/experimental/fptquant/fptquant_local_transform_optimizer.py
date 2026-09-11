@@ -3,7 +3,7 @@
 
 # pylint: disable=missing-docstring
 
-from tqdm import tqdm
+from aimet_torch.common.progress import progress_bar
 import itertools
 import torch
 
@@ -44,7 +44,9 @@ class LocalTransformOptimizer:
 
     # pylint: disable=protected-access
     def optimize(self):
-        for _ in tqdm(range(self.num_iterations), desc="Locally optimizing transforms"):
+        for _ in progress_bar(
+            range(self.num_iterations), desc="Locally optimizing transforms"
+        ):
             self.optimizer.zero_grad()
             with torch.nn.utils.parametrize.cached():
                 loss = torch.stack(

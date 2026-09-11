@@ -11,7 +11,6 @@ import sys
 import tempfile
 import contextlib
 from copy import deepcopy
-from tqdm import tqdm
 from typing import List, Union, Tuple, Generator, Callable
 
 import torch
@@ -20,6 +19,7 @@ from torch.utils.data import DataLoader
 from aimet_torch.utils import default_forward_fn, patch_attr
 from aimet_torch.utils import change_tensor_device_placement, nested_map, get_device
 from aimet_torch import QuantizationSimModel, utils
+from aimet_torch.common.progress import progress_bar
 
 logger = utils.AimetLogger.get_area_logger(utils.AimetLogger.LogAreas.Utils)
 
@@ -420,7 +420,7 @@ class BlockwiseSampler:
                 self.sim.model.to("cpu")
 
         for block_idx, block in enumerate(
-            tqdm(self.blocks[start_block:], desc=desc), start=start_block
+            progress_bar(self.blocks[start_block:], desc=desc), start=start_block
         ):
             # Quantizers must be ENABLED when calculating quantized block inputs
             qt_block_inputs = [next(block_input) for block_input in qt_inferences]

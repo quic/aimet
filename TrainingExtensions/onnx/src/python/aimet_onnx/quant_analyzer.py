@@ -9,7 +9,7 @@ import re
 from typing import Any, Callable, Union, Tuple, Dict, List, Iterable, Optional
 import copy
 from collections import defaultdict
-from tqdm import tqdm
+from aimet_onnx.common.progress import progress_bar  # pylint: disable=import-error
 from pathlib import Path
 
 import numpy as np
@@ -426,7 +426,7 @@ class QuantAnalyzer:
                 self._enable_disable_quantizers(enabled_quantizers, enabled=False)
 
         eval_score_dict = {}
-        for op_name, enabled_quantizers in tqdm(op_to_quantizers_dict.items()):
+        for op_name, enabled_quantizers in progress_bar(op_to_quantizers_dict.items()):
             self._enable_disable_quantizers(enabled_quantizers, enabled=enabled_before)
 
             # Record eval score.

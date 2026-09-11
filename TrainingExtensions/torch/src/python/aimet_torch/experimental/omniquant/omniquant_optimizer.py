@@ -14,7 +14,7 @@ from safetensors.numpy import save_file, load_file
 import torch
 from typing import Union, Callable
 import time
-from tqdm import tqdm
+from aimet_torch.common.progress import progress_bar
 
 from aimet_torch._base.quantsim import logger
 from aimet_torch.blockwise_sampler import (
@@ -189,7 +189,7 @@ class Omniquant:
                 optimizer = torch.optim.AdamW(grouped_params)
                 loss_fn = torch.nn.MSELoss(reduction="sum")
                 curr_iteration = 0
-                pbar = tqdm(
+                pbar = progress_bar(
                     total=num_iterations,
                     leave=False,
                     position=1,

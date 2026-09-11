@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from contextlib import contextmanager
 import itertools
 import numpy as np
-from tqdm import tqdm
+from aimet_onnx.common.progress import progress_bar  # pylint: disable=import-error
 import onnx
 import onnxruntime
 import torch
@@ -547,7 +547,7 @@ class SequentialMse:
             # Store accumulated loss per dep_node across candidates
             total_loss = defaultdict(list)
 
-            for candidate_index in tqdm(
+            for candidate_index in progress_bar(
                 range(self.params.num_candidates),
                 desc="Candidates",
                 position=0,

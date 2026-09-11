@@ -6,7 +6,7 @@
 import torch
 from typing import Type
 from types import NoneType
-from tqdm import tqdm
+from aimet_torch.common.progress import progress_bar
 
 from transformers import PretrainedConfig
 
@@ -65,7 +65,7 @@ class FPTQuant:
 
         layers_to_optimize = [model.model.embed_tokens, model.lm_head]
 
-        for block_interface in tqdm(
+        for block_interface in progress_bar(
             FPTQuant._get_blocks(model), desc="Block transforms inserted"
         ):
             if FPTQuant._enable_residual_transform:
@@ -199,7 +199,7 @@ class FPTQuant:
     def insert_nonmergeable_down_project_transform(
         model: torch.nn.Module, config: PretrainedConfig
     ):
-        for block_interface in tqdm(
+        for block_interface in progress_bar(
             FPTQuant._get_blocks(model), desc="Block transforms inserted"
         ):
             block_interface.down_proj = TransformationMixin.from_module(

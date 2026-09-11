@@ -9,7 +9,6 @@ from copy import deepcopy
 from dataclasses import dataclass
 from types import NoneType
 from typing import Callable, List, Any, Tuple, Type, Sequence, Optional, Dict
-from tqdm import tqdm
 from pathlib import Path
 import json
 
@@ -67,6 +66,7 @@ from aimet_torch.common.utils import AimetLogger
 from aimet_torch.common.early_stopping import (
     _create_early_stopping,
 )
+from aimet_torch.common.progress import progress_bar
 from aimet_torch import QuantizationSimModel
 from aimet_torch.nn import QuantizedLinear, compute_param_encodings, QuantizedConv2d
 from aimet_torch.utils import (
@@ -605,7 +605,7 @@ class AdaScale:
 
         early_stopping = _create_early_stopping(_EARLY_STOPPING)
 
-        pbar = tqdm(
+        pbar = progress_bar(
             total=num_iterations,
             leave=False,
             position=1,

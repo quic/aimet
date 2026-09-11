@@ -7,7 +7,7 @@
 import itertools
 from typing import Iterable, List, Callable, Any
 
-from tqdm import tqdm
+from aimet_torch.common.progress import progress_bar
 import torch
 from torch.utils.data import DataLoader
 from torch.nn.modules.batchnorm import _BatchNorm
@@ -135,7 +135,7 @@ def reestimate_bn_stats(
                 num_batches = min(len(dataloader), num_batches)
                 dataloader_slice = itertools.islice(dataloader, num_batches)
 
-                for data in tqdm(
+                for data in progress_bar(
                     dataloader_slice, total=num_batches, desc="batchnorm reestimation"
                 ):
                     forward_fn(model, data)

@@ -6,7 +6,7 @@
 
 from typing import Any, Callable, Union, Tuple, List, Dict, Iterable
 import tempfile
-from tqdm import tqdm
+from aimet_onnx.common.progress import progress_bar  # pylint: disable=import-error
 
 import onnxruntime as ort
 
@@ -118,7 +118,7 @@ def _analyze_group_sensitivities(
     """
     quantizer_sensitivities = {}
     with disable_quantizers(sim, sim.qc_quantize_op_dict.keys()):
-        for group in tqdm(quantizer_groups):
+        for group in progress_bar(quantizer_groups):
             quantizer_names = group.activation_quantizers + group.parameter_quantizers
 
             # Enable group quantizers
